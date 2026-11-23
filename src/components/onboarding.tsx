@@ -77,7 +77,16 @@ export function Onboarding({ signedIn, startAt }: { signedIn: boolean; startAt: 
           </div>
         ) : null}
 
-        {step === "account" ? <AccountStep key="account" onDone={() => router.refresh()} /> : null}
+        {step === "account" ? (
+          <AccountStep
+            key="account"
+            onDone={() => {
+              // signed in: move on (the server sends already-set-up users straight to Today)
+              setStep("prefs");
+              router.refresh();
+            }}
+          />
+        ) : null}
 
         {step === "prefs" ? (
           <div key="prefs" className="animate-rise space-y-5">
