@@ -5,6 +5,7 @@ import { AlarmClock, Bell, CalendarClock, CircleAlert } from "lucide-react";
 import { useAppUI, usePrefs, useToast } from "./providers";
 import { Button, cx } from "./ui";
 import { useEvents, useNow, useTasks } from "@/lib/client/hooks";
+import { showSystemNotification } from "@/lib/client/notify";
 import { fmtTime, fmtTimeRange, todayLocal } from "@/lib/client/format";
 import type { CalendarEvent } from "@/lib/types";
 
@@ -43,16 +44,9 @@ function reminderBody(e: CalendarEvent, minutes: number, prefs: Parameters<typeo
   return `${day} at ${fmtTime(e.startAt, prefs)}${e.location ? ` · ${e.location}` : ""}`;
 }
 
-/** Show a system notification (via the service worker where required, e.g. Android). */
+/** Show a system notification (via the service worker, which Android requires). */
 async function systemNotify(title: string, body: string, tag: string) {
-  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-  try {
-    const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
-    if (reg) await reg.showNotification(title, { body, tag, icon: "/icon-192.png", badge: "/icon-192.png" });
-    else new Notification(title, { body, tag, icon: "/icon-192.png" });
-  } catch {
-    /* notifications unsupported in this context */
-  }
+  await showSystemNotification(title, body, tag); // failures fall back to the in-app reminder
 }
 
 export function useReminders() {

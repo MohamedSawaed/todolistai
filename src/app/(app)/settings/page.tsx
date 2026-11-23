@@ -6,6 +6,7 @@ import { Button, Field, Input, Segmented, Select } from "@/components/ui";
 import { AvailabilityFields, ClockField, LanguageField, Section, TimezoneField } from "@/components/preferences-form";
 import { REMINDER_OPTIONS } from "@/components/composer";
 import { ReminderRulesEditor } from "@/components/reminder-rules";
+import { enableNotifications, showSystemNotification } from "@/lib/client/notify";
 
 const noopSubscribe = () => () => undefined;
 import { ApiError } from "@/lib/client/api";
@@ -148,14 +149,22 @@ export default function SettingsPage() {
               checked={draft.notifications.browser}
               onChange={async (e) => {
                 const on = e.target.checked;
-                if (on && typeof Notification !== "undefined" && Notification.permission !== "granted") {
-                  const res = await Notification.requestPermission();
-                  if (res !== "granted") {
-                    toast({ message: "Browser notifications were blocked. In-app reminders still work.", tone: "error" });
+                if (on) {
+                  const res = await enableNotifications();
+                  if (!res.ok) {
+                    toast({ message: res.reason, tone: "error" });
                     return;
                   }
                 }
-                setDraft({ ...draft, notifications: { ...draft.notifications, browser: on } });
+                // saved right away (keeps any other unsaved edits in the draft)
+                const nextDraft = { ...draft, notifications: { ...draft.notifications, browser: on } };
+                try {
+                  await savePrefs({ ...prefs, notifications: { ...prefs.notifications, browser: on } });
+                  setDraft(nextDraft);
+                  toast({ message: on ? "Phone notifications are on" : "Phone notifications are off" });
+                } catch (err) {
+                  toast({ message: err instanceof Error ? err.message : "Couldn't save", tone: "error" });
+                }
               }}
               disabled={!notifSupported}
             />
@@ -166,13 +175,9 @@ export default function SettingsPage() {
               type="button"
               size="sm"
               onClick={async () => {
-                try {
-                  const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
-                  if (reg) await reg.showNotification("Tempo", { body: "Notifications are working.", icon: "/icon-192.png" });
-                  else new Notification("Tempo", { body: "Notifications are working.", icon: "/icon-192.png" });
-                } catch {
-                  toast({ message: "This browser couldn't show a notification.", tone: "error" });
-                }
+                const res = await enableNotifications().then((r) => (r.ok ? showSystemNotification("Tempo", "Notifications are working.", "tempo-test") : r));
+                if (res.ok) toast({ message: "Test notification sent. Check your notification bar." });
+                else toast({ message: res.reason, tone: "error" });
               }}
             >
               <Bell className="size-3.5" /> Send a test notification
