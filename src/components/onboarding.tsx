@@ -162,7 +162,17 @@ function AccountStep({ onDone }: { onDone: () => void }) {
         ? await sb.auth.signUp({ email, password, options: { emailRedirectTo: redirect } })
         : await sb.auth.signInWithPassword({ email, password });
     setBusy(false);
-    if (res.error) return setError(res.error.message);
+    if (res.error) {
+      const msg = res.error.message.toLowerCase();
+      if (msg.includes("email not confirmed")) return setError("This email isn't confirmed yet. Open the confirmation email from Supabase, or ask the app owner to confirm your account.");
+      if (msg.includes("invalid login credentials")) return setError("Wrong email or password. If you haven't created an account yet, choose “Create an account” below.");
+      return setError(res.error.message);
+    }
+    // Supabase returns a user with no identities when the email is already registered
+    if (mode === "signup" && res.data.user && res.data.user.identities?.length === 0) {
+      setMode("signin");
+      return setError("An account with this email already exists. Sign in instead.");
+    }
     if (!res.data.session) return setNotice("Check your inbox to confirm your email, then come back here.");
     onDone();
   }
