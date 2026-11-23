@@ -1,0 +1,258 @@
+"use client";
+import { useEffect, useMemo, useState } from "react";
+import { DateTime } from "luxon";
+import { AlertTriangle, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useAppUI, usePrefs, useToast } from "@/components/providers";
+import { Button, Segmented, Sheet } from "@/components/ui";
+import { TimeGrid } from "@/components/calendar/time-grid";
+import { MonthView, monthGrid } from "@/components/calendar/month-view";
+import { weekStart } from "@/components/week-strip";
+import { useEvents, useInvalidateAll } from "@/lib/client/hooks";
+import { api, ApiError } from "@/lib/client/api";
+import { fmtSlot, fmtTimeRange, todayLocal } from "@/lib/client/format";
+import { intlLocale } from "@/lib/i18n";
+import type { CalendarEvent, ConflictInfo, Slot } from "@/lib/types";
+
+type View = "day" | "week" | "month";
+
+interface PendingMove {
+  event: CalendarEvent;
+  start: string;
+  end: string;
+  checking: boolean;
+  conflicts: ConflictInfo[];
+  alternatives: Slot[];
+}
+
+export default function CalendarPage() {
+  const { prefs, t } = usePrefs();
+  const ui = useAppUI();
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const zone = prefs.timezone;
+  const [view, setView] = useState<View>(prefs.defaultView);
+  const [anchor, setAnchor] = useState(() => todayLocal(zone));
+  const [move, setMove] = useState<PendingMove | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // compact screens start on the day view
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 639px)").matches && prefs.defaultView === "week") setView("day");
+  }, [prefs.defaultView]);
+
+  const days = useMemo(() => {
+    if (view === "day") return [anchor];
+    const ws = weekStart(anchor, prefs.weekStartsOn, zone);
+    return Array.from({ length: 7 }, (_, i) => DateTime.fromISO(ws).plus({ days: i }).toISODate()!);
+  }, [view, anchor, prefs.weekStartsOn, zone]);
+
+  const range = view === "month" ? (() => {
+    const cells = monthGrid(anchor, prefs.weekStartsOn);
+    return [cells[0], cells[cells.length - 1]] as const;
+  })() : ([days[0], days[days.length - 1]] as const);
+  const events = useEvents(range[0], range[1], zone);
+
+  const shift = (n: number) => {
+    const d = DateTime.fromISO(anchor);
+    setAnchor((view === "day" ? d.plus({ days: n }) : view === "week" ? d.plus({ weeks: n }) : d.plus({ months: n })).toISODate()!);
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (e.metaKey || e.ctrlKey || e.altKey || el.closest("input, textarea, select, [role=dialog]")) return;
+      const rtl = document.documentElement.dir === "rtl";
+      if (e.key === "ArrowLeft") shift(rtl ? 1 : -1);
+      else if (e.key === "ArrowRight") shift(rtl ? -1 : 1);
+      else if (e.key === "t") setAnchor(todayLocal(zone));
+      else if (e.key === "d") setView("day");
+      else if (e.key === "w") setView("week");
+      else if (e.key === "m") setView("month");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const a = DateTime.fromISO(anchor).setLocale(intlLocale(prefs.locale));
+  const title =
+    view === "month"
+      ? a.toFormat("LLLL yyyy")
+      : view === "day"
+        ? a.toFormat("cccc, LLLL d")
+        : (() => {
+            const s = DateTime.fromISO(days[0]).setLocale(intlLocale(prefs.locale));
+            const e = DateTime.fromISO(days[6]).setLocale(intlLocale(prefs.locale));
+            return s.month === e.month ? `${s.toFormat("LLLL d")} – ${e.toFormat("d, yyyy")}` : `${s.toFormat("LLL d")} – ${e.toFormat("LLL d, yyyy")}`;
+          })();
+
+  // ---- drag & drop: propose → validate → confirm → persist
+  async function proposeMove(event: CalendarEvent, start: string, end: string) {
+    setMove({ event, start, end, checking: true, conflicts: [], alternatives: [] });
+    try {
+      const res = await api<{ conflicts: ConflictInfo[]; alternatives: Slot[] }>("/api/availability", { method: "POST", body: { startAt: start, endAt: end, excludeId: event.id } });
+      setMove((m) => (m && m.event.id === event.id ? { ...m, checking: false, ...res } : m));
+    } catch (e) {
+      setMove(null);
+      toast({ message: e instanceof Error ? e.message : "Couldn't check availability", tone: "error" });
+    }
+  }
+
+  async function commitMove(slot: { start: string; end: string }, allowOverlap = false) {
+    if (!move) return;
+    setSaving(true);
+    try {
+      const prev = { startAt: move.event.startAt, endAt: move.event.endAt };
+      const res = await api<{ event: CalendarEvent }>(`/api/events/${move.event.id}`, {
+        method: "PATCH",
+        body: { startAt: slot.start, endAt: slot.end, expectedVersion: move.event.version, allowOverlap },
+      });
+      await invalidate();
+      setMove(null);
+      toast({
+        message: `Moved “${res.event.title}” to ${fmtSlot(slot.start, slot.end, prefs)}`,
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              await api(`/api/events/${res.event.id}`, { method: "PATCH", body: { ...prev, expectedVersion: res.event.version, allowOverlap: true } });
+              await invalidate();
+            } catch (e) {
+              toast({ message: e instanceof Error ? e.message : "Couldn't undo", tone: "error" });
+            }
+          },
+        },
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "conflict") {
+        setMove((m) => (m ? { ...m, conflicts: err.body.conflicts as ConflictInfo[], alternatives: err.body.alternatives as Slot[] } : m));
+      } else {
+        if (err instanceof ApiError && err.code === "version_conflict") await invalidate();
+        toast({ message: err instanceof Error ? err.message : "Couldn't move the event", tone: "error" });
+        setMove(null);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex h-[calc(100dvh-76px-env(safe-area-inset-bottom))] flex-col gap-4 px-3 pt-4 pb-3 sm:px-6 sm:pt-6 lg:h-dvh lg:pb-6">
+      <header className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <h1 className="min-w-0 basis-full truncate text-[20px] font-semibold tracking-tight sm:flex-1 sm:basis-auto sm:text-[24px]">{title}</h1>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon-sm" aria-label="Previous" onClick={() => shift(-1)}>
+            <ChevronLeft className="size-4 rtl:rotate-180" />
+          </Button>
+          <Button size="sm" onClick={() => setAnchor(todayLocal(zone))}>
+            {t("calendar.today")}
+          </Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Next" onClick={() => shift(1)}>
+            <ChevronRight className="size-4 rtl:rotate-180" />
+          </Button>
+        </div>
+        <Segmented
+          size="sm"
+          label="Calendar view"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "day", label: "Day" },
+            { value: "week", label: "Week" },
+            { value: "month", label: "Month" },
+          ]}
+        />
+        <div className="ms-auto hidden sm:ms-0 sm:block">
+          <Button variant="primary" size="sm" onClick={() => ui.openComposer({ kind: "event", start: DateTime.fromISO(`${anchor}T09:00`, { zone }).toUTC().toISO()! })}>
+            <Plus className="size-3.5" /> New event
+          </Button>
+        </div>
+      </header>
+
+      {events.isError ? (
+        <div role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[13.5px] text-danger">
+          Couldn&apos;t load your calendar. <button className="font-semibold underline" onClick={() => events.refetch()}>Try again</button>
+        </div>
+      ) : null}
+
+      {view === "month" ? (
+        <MonthView
+          anchor={anchor}
+          events={events.data ?? []}
+          onOpen={ui.openEvent}
+          onPickDate={(d) => {
+            setAnchor(d);
+            setView("day");
+          }}
+        />
+      ) : (
+        <TimeGrid
+          days={days}
+          events={events.data ?? []}
+          onOpen={ui.openEvent}
+          onSlot={(start, end) => ui.openComposer({ kind: "event", start, end })}
+          onMove={proposeMove}
+          pending={move ? { id: move.event.id, start: move.start, end: move.end } : null}
+        />
+      )}
+
+      <Sheet open={!!move} onClose={() => setMove(null)} title={move ? `Move “${move.event.title}”?` : ""}>
+        {move ? (
+          <div className="space-y-4">
+            <div className="tabular flex flex-wrap items-center gap-2 text-[13.5px]">
+              <span className="rounded-lg bg-surface-2 px-2 py-1 text-ink-2 line-through">{fmtSlot(move.event.startAt, move.event.endAt, prefs)}</span>
+              <span className="text-ink-3">→</span>
+              <span className="rounded-lg bg-primary-soft px-2 py-1 font-medium text-primary-ink">{fmtSlot(move.start, move.end, prefs)}</span>
+            </div>
+            {move.event.flexibility === "fixed" ? (
+              <p className="text-[12.5px] text-ink-2">This is a fixed commitment. If it involves someone else, let them know about the new time too.</p>
+            ) : null}
+            {move.checking ? (
+              <p className="text-[13px] text-ink-2">Checking your calendar…</p>
+            ) : move.conflicts.length ? (
+              <div className="space-y-3 rounded-2xl border border-warning/30 bg-warning-soft p-3.5">
+                <p className="flex items-start gap-2 text-[13.5px]">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+                  <span>
+                    That time overlaps{" "}
+                    {move.conflicts.map((c, i) => (
+                      <span key={c.id}>
+                        {i ? ", " : ""}
+                        <b>{c.title}</b> ({fmtTimeRange(c.startAt, c.endAt, prefs)})
+                      </span>
+                    ))}
+                    .
+                  </span>
+                </p>
+                {move.alternatives.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {move.alternatives.map((s) => (
+                      <Button key={s.start} size="sm" onClick={() => void commitMove(s)} disabled={saving}>
+                        {fmtSlot(s.start, s.end, prefs)}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-[13px] text-[var(--cat-health-ink)]">This time is free.</p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="ghost" onClick={() => setMove(null)}>
+                Cancel
+              </Button>
+              {move.conflicts.length ? (
+                <Button loading={saving} onClick={() => void commitMove({ start: move.start, end: move.end }, true)} disabled={move.checking}>
+                  Move anyway (overlap)
+                </Button>
+              ) : (
+                <Button variant="primary" loading={saving} disabled={move.checking} onClick={() => void commitMove({ start: move.start, end: move.end })}>
+                  Move event
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </Sheet>
+    </div>
+  );
+}
