@@ -29,6 +29,20 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Hosted servers (e.g. Vercel) can't keep a local data file, so Supabase is required there.
+  if (storageMode() === "local" && process.env.VERCEL) {
+    return (
+      <html lang="en">
+        <body style={{ fontFamily: "system-ui, sans-serif", maxWidth: 560, margin: "15vh auto", padding: 16, lineHeight: 1.5 }}>
+          <h1 style={{ fontSize: 22 }}>Tempo needs a database</h1>
+          <p>
+            This deployment has no Supabase connection, so your data couldn&apos;t be saved. In your Vercel project settings, add{" "}
+            <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>, then redeploy.
+          </p>
+        </body>
+      </html>
+    );
+  }
   const session = await getOptionalSession();
   const prefs = session ? await session.repo.getPreferences() : defaultPreferences();
   const theme = prefs.theme === "system" ? undefined : prefs.theme;

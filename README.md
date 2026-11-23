@@ -38,6 +38,38 @@ override it with `ANTHROPIC_MODEL` / `ANTHROPIC_EFFORT`. The key is only ever re
 
 When Supabase is configured, signed-out visitors are sent to `/welcome` (onboarding → account).
 
+## Deploy online (Vercel + Supabase, both free)
+
+This gives you an `https://…vercel.app` link that works on any device, with accounts and data
+saved in the cloud. A secure link is also what phones require before they allow installing the
+app and showing notifications.
+
+**1. Database (Supabase)**
+1. Sign in at <https://supabase.com> → **New project**. Pick a region near you and save the database password.
+2. Open **SQL Editor** → **New query**. Paste all of `supabase/migrations/0001_init.sql` → **Run**.
+   Then do the same with `0002_event_reminders.sql`.
+3. Open **Project Settings → API** and copy the **Project URL** and the **anon public** key.
+
+**2. Hosting (Vercel)**
+1. Sign in at <https://vercel.com> with your GitHub account → **Add New… → Project** → import `todolistai`.
+2. Before clicking Deploy, open **Environment Variables** and add:
+   - `NEXT_PUBLIC_SUPABASE_URL`: the Project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: the anon key
+   - `ANTHROPIC_API_KEY`: your Claude API key
+3. Click **Deploy** and copy your app link, e.g. `https://todolistai.vercel.app`.
+
+**3. Connect sign-in to your link (Supabase)**
+- **Authentication → URL Configuration**: set **Site URL** to your Vercel link, and add
+  `https://YOUR-LINK.vercel.app/auth/callback` under **Redirect URLs**.
+
+**4. Install on your phone**
+- Open your link → create an account.
+- **iPhone (Safari):** Share → **Add to Home Screen**. **Android (Chrome):** ⋮ → **Install app** / **Add to Home screen**.
+
+Every push to `main` on GitHub redeploys automatically. If you change a `NEXT_PUBLIC_*`
+variable, redeploy so the new value is built in. `npm run test:db` checks the SQL migrations
+against a local Postgres without needing a Supabase project.
+
 ## Scripts
 - `npm run dev` / `npm run build` / `npm start`
 - `npm test`: Vitest suite (engine, timezones/DST, AI validation, confirmations, authorization, concurrency, assistant loop)

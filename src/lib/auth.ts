@@ -31,6 +31,7 @@ export async function requireSession(): Promise<Session> {
   // user data is always per-request — never prerender it at build time
   await connection();
   if (storageMode() === "local") {
+    if (process.env.VERCEL) throw new Error("Supabase is not configured for this deployment; local file storage isn't available on hosted servers.");
     return {
       repo: new LocalRepository(LOCAL_USER_ID, localStore()),
       user: { id: LOCAL_USER_ID, email: null },
