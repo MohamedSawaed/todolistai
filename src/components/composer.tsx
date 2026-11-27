@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DateTime } from "luxon";
 import { AlertTriangle, CalendarClock, CheckSquare, MapPin, Plus, StickyNote, Trash2 } from "lucide-react";
 import { useAppUI, usePrefs, useToast, type ComposerKind, type ComposerOptions } from "./providers";
@@ -58,9 +59,19 @@ function roundedNext(zone: string) {
   return now.plus({ minutes: 30 - (now.minute % 30) }).startOf("minute");
 }
 
+/** The value after it has stopped changing for `ms` (used to avoid an AI call per keystroke). */
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return v;
+}
+
 // ---------------------------------------------------------------- event
 export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; onDone: () => void; existing?: CalendarEvent }) {
-  const { prefs } = usePrefs();
+  const { prefs, status } = usePrefs();
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const zone = prefs.timezone;
@@ -79,12 +90,36 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
   const [flexibility, setFlexibility] = useState<"fixed" | "flexible">(existing?.flexibility ?? "fixed");
   const [location, setLocation] = useState(existing?.location ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
-  // null = follow the reminder rules (re-evaluated as the title/category change)
+  // null = automatic: keyword rules instantly, then the AI's understanding of the title
   const [manualReminders, setManualReminders] = useState<number[] | null>(existing ? existing.reminders : null);
   const auto = remindersFor(title, category, prefs);
-  const reminders = manualReminders ?? auto.reminders;
+  const debouncedTitle = useDebounced(title.trim(), 800);
+  const aiSuggestion = useQuery({
+    queryKey: ["reminder-suggestion", debouncedTitle, category, description.trim()],
+    queryFn: () =>
+      api<{ reminders: number[]; reason: string }>("/api/reminders/suggest", {
+        method: "POST",
+        body: { title: debouncedTitle, category, description: description.trim() || null },
+      }),
+    enabled: status.ai && !existing && manualReminders === null && debouncedTitle.length >= 3,
+    staleTime: Infinity,
+    retry: 0,
+  });
+  // the AI answer only counts while it matches what's typed now
+  const ai = aiSuggestion.data && debouncedTitle === title.trim() ? aiSuggestion.data : null;
+  const reminders = manualReminders ?? ai?.reminders ?? auto.reminders;
   const reminderHint =
-    manualReminders === null ? (auto.rule ? `Set by your “${auto.rule.label}” reminder rule` : title.trim() ? "Your default reminder" : null) : null;
+    manualReminders !== null
+      ? null
+      : ai
+        ? `AI: ${ai.reason}`
+        : aiSuggestion.isFetching || (status.ai && !existing && title.trim().length >= 3 && debouncedTitle !== title.trim())
+          ? "Choosing the best reminders…"
+          : auto.rule
+            ? `Set by your “${auto.rule.label}” reminder rule`
+            : title.trim()
+              ? "Your default reminder"
+              : null;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [conflict, setConflict] = useState<ConflictResponse | null>(null);
   const [saving, setSaving] = useState(false);
