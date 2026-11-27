@@ -2,25 +2,28 @@
 import { Briefcase, Dumbbell, GraduationCap, Heart, Star, type LucideIcon } from "lucide-react";
 import { CATEGORIES, PRIORITIES, type Category, type Priority } from "@/lib/types";
 import { cx } from "./ui";
+import { usePrefs } from "./providers";
+import { msg } from "@/lib/i18n";
 
 export const CATEGORY_META: Record<Category, { label: string; icon: LucideIcon }> = {
-  work: { label: "Work", icon: Briefcase },
-  personal: { label: "Personal", icon: Heart },
-  learning: { label: "Learning", icon: GraduationCap },
-  health: { label: "Health", icon: Dumbbell },
-  important: { label: "Important", icon: Star },
+  work: { label: msg("Work"), icon: Briefcase },
+  personal: { label: msg("Personal"), icon: Heart },
+  learning: { label: msg("Learning"), icon: GraduationCap },
+  health: { label: msg("Health"), icon: Dumbbell },
+  important: { label: msg("Important"), icon: Star },
 };
 
 export const PRIORITY_META: Record<Priority, { label: string; tone: string }> = {
-  low: { label: "Low", tone: "text-ink-3" },
-  medium: { label: "Medium", tone: "text-ink-2" },
-  high: { label: "High", tone: "text-[var(--cat-learning-ink)]" },
-  urgent: { label: "Urgent", tone: "text-[var(--cat-important-ink)]" },
+  low: { label: msg("Low"), tone: "text-ink-3" },
+  medium: { label: msg("Medium"), tone: "text-ink-2" },
+  high: { label: msg("High"), tone: "text-[var(--cat-learning-ink)]" },
+  urgent: { label: msg("Urgent"), tone: "text-[var(--cat-important-ink)]" },
 };
 
 export function CategoryPicker({ value, onChange }: { value: Category; onChange: (c: Category) => void }) {
+  const { t } = usePrefs();
   return (
-    <div role="radiogroup" aria-label="Category" className="flex flex-wrap gap-1.5">
+    <div role="radiogroup" aria-label={t("Category")} className="flex flex-wrap gap-1.5">
       {CATEGORIES.map((c) => {
         const Icon = CATEGORY_META[c].icon;
         const active = c === value;
@@ -38,7 +41,7 @@ export function CategoryPicker({ value, onChange }: { value: Category; onChange:
             )}
           >
             <Icon className="size-3.5" style={{ color: "var(--c)" }} />
-            {CATEGORY_META[c].label}
+            {t(CATEGORY_META[c].label)}
           </button>
         );
       })}
@@ -47,8 +50,9 @@ export function CategoryPicker({ value, onChange }: { value: Category; onChange:
 }
 
 export function PriorityPicker({ value, onChange }: { value: Priority; onChange: (p: Priority) => void }) {
+  const { t } = usePrefs();
   return (
-    <div role="radiogroup" aria-label="Priority" className="grid grid-cols-4 gap-1 rounded-xl bg-surface-2 p-1">
+    <div role="radiogroup" aria-label={t("Priority")} className="grid grid-cols-4 gap-1 rounded-xl bg-surface-2 p-1">
       {PRIORITIES.map((p) => (
         <button
           key={p}
@@ -61,7 +65,7 @@ export function PriorityPicker({ value, onChange }: { value: Priority; onChange:
             p === value ? "bg-surface shadow-[0_1px_3px_rgb(24_24_40/0.08)] " + PRIORITY_META[p].tone : "text-ink-2 hover:text-ink",
           )}
         >
-          {PRIORITY_META[p].label}
+          {t(PRIORITY_META[p].label)}
         </button>
       ))}
     </div>

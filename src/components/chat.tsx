@@ -6,13 +6,14 @@ import { useAppUI, usePrefs } from "./providers";
 import { Button, cx } from "./ui";
 import { ProposalCard } from "./proposal-card";
 import { api, ApiError } from "@/lib/client/api";
+import { msg } from "@/lib/i18n";
 import type { ChatMessageView, Proposal } from "@/lib/types";
 
 export const SUGGESTIONS = [
-  { label: "Plan my day", prompt: "Plan my day — what's on today and when could I fit in my open tasks?", icon: Sun },
-  { label: "Find free time", prompt: "Find me a free two-hour block this week.", icon: CalendarSearch },
-  { label: "Add an appointment", prompt: "Add an appointment ", icon: CalendarPlus, prefill: true },
-  { label: "Reorganize tomorrow", prompt: "I have too much to do tomorrow. Help me reorganize.", icon: ListRestart },
+  { label: msg("Plan my day"), prompt: msg("Plan my day — what's on today and when could I fit in my open tasks?"), icon: Sun },
+  { label: msg("Find free time"), prompt: msg("Find me a free two-hour block this week."), icon: CalendarSearch },
+  { label: msg("Add an appointment"), prompt: msg("Add an appointment"), icon: CalendarPlus, prefill: true },
+  { label: msg("Reorganize tomorrow"), prompt: msg("I have too much to do tomorrow. Help me reorganize."), icon: ListRestart },
 ];
 
 interface Thread {
@@ -21,7 +22,7 @@ interface Thread {
 }
 
 export function ChatView({ compact = false }: { compact?: boolean }) {
-  const { prefs, status } = usePrefs();
+  const { prefs, status, t } = usePrefs();
   const ui = useAppUI();
   const qc = useQueryClient();
   const history = useQuery({ queryKey: ["assistant"], queryFn: () => api<Thread>("/api/assistant"), staleTime: Infinity });
@@ -65,7 +66,7 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
       // remove the optimistic bubble and give the text back so nothing is lost
       setThread((t) => ({ ...t, messages: t.messages.filter((m) => m.id !== optimistic.id) }));
       setInput(trimmed);
-      setError({ message: err instanceof ApiError ? err.message : "Something went wrong.", text: trimmed });
+      setError({ message: err instanceof ApiError ? t(err.message) : t("Something went wrong."), text: trimmed });
     } finally {
       setSending(false);
       setTimeout(() => inputRef.current?.focus(), 0);
@@ -105,9 +106,9 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
               <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-primary-soft text-primary">
                 <Sparkles className="size-6" />
               </div>
-              <h2 className="text-[19px] font-semibold tracking-tight">{firstName ? `How can I help, ${firstName}?` : "How can I help?"}</h2>
+              <h2 className="text-[19px] font-semibold tracking-tight">{firstName ? t("How can I help, {name}?", { name: firstName }) : t("How can I help?")}</h2>
               <p className="mt-1.5 max-w-sm text-[13.5px] text-ink-2">
-                Tell me what you need to do. I&apos;ll check your real calendar, find time, and prepare changes for you to confirm.
+                {t("Tell me what you need to do. I'll check your real calendar, find time, and prepare changes for you to confirm.")}
               </p>
               <div className={cx("mt-6 grid w-full gap-2", compact ? "grid-cols-1" : "sm:grid-cols-2")}>
                 {SUGGESTIONS.map((s) => (
@@ -115,14 +116,14 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
                     key={s.label}
                     onClick={() => {
                       if (s.prefill) {
-                        setInput(s.prompt);
+                        setInput(t(s.prompt) + " ");
                         inputRef.current?.focus();
-                      } else void send(s.prompt);
+                      } else void send(t(s.prompt));
                     }}
                     className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3 text-start text-[13.5px] transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-soft"
                   >
                     <s.icon className="size-4 shrink-0 text-primary" />
-                    {s.label}
+                    {t(s.label)}
                   </button>
                 ))}
               </div>
@@ -132,22 +133,22 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
           )}
           {sending ? (
             <div className="flex items-center gap-2 text-[13px] text-ink-3" aria-live="polite">
-              <span className="flex gap-1 rounded-2xl rounded-ss-md bg-surface-2 px-3.5 py-3" aria-label="Assistant is thinking">
+              <span className="flex gap-1 rounded-2xl rounded-ss-md bg-surface-2 px-3.5 py-3" aria-label={t("Assistant is thinking")}>
                 {[0, 1, 2].map((i) => (
                   <span key={i} className="typing-dot size-1.5 rounded-full bg-ink-3" style={{ animationDelay: `${i * 0.15}s` }} />
                 ))}
               </span>
-              Checking your calendar…
+              {t("Checking your calendar…")}
             </div>
           ) : null}
           {error ? (
             <div role="alert" className="flex animate-rise items-start gap-3 rounded-2xl border border-danger/25 bg-danger-soft px-3.5 py-3 text-[13px]">
               <div className="min-w-0 flex-1">
                 <p>{error.message}</p>
-                <p className="mt-0.5 text-ink-2">Your message is back in the box below — nothing was changed.</p>
+                <p className="mt-0.5 text-ink-2">{t("Your message is back in the box below — nothing was changed.")}</p>
               </div>
               <Button size="sm" variant="secondary" onClick={() => void send(error.text)}>
-                <RotateCcw className="size-3.5" /> Retry
+                <RotateCcw className="size-3.5" />{" "}{t("Retry")}
               </Button>
             </div>
           ) : null}
@@ -160,8 +161,7 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
             <div className="mb-2.5 flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning-soft px-3 py-2.5 text-[12.5px] text-ink">
               <KeyRound className="mt-0.5 size-4 shrink-0 text-warning" />
               <span>
-                <b>AI setup needed.</b> Add <code className="rounded bg-surface px-1">ANTHROPIC_API_KEY</code> to <code className="rounded bg-surface px-1">.env.local</code> and restart the server.
-                Everything else in Tempo works without it.
+                <b>{t("AI setup needed.")}</b> {t("The AI key isn't set on the server yet. Everything else in Tempo works without it.")}
               </span>
             </div>
           ) : null}
@@ -189,11 +189,11 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
                   void send(input);
                 }
               }}
-              placeholder="Tell me what you need to do..."
-              aria-label="Message the assistant"
+              placeholder={t("Tell me what you need to do...")}
+              aria-label={t("Message the assistant")}
               className="max-h-[140px] min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[14.5px] outline-none placeholder:text-ink-3 disabled:opacity-60"
             />
-            <Button type="submit" variant="primary" size="icon" aria-label="Send" disabled={!input.trim() || sending || !status.ai} className="size-9 rounded-xl">
+            <Button type="submit" variant="primary" size="icon" aria-label={t("Send")} disabled={!input.trim() || sending || !status.ai} className="size-9 rounded-xl">
               <ArrowUp className="size-4" />
             </Button>
           </form>
@@ -206,7 +206,7 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
                 }}
                 className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] text-ink-3 hover:bg-surface-2 hover:text-ink-2"
               >
-                <SquarePen className="size-3.5" /> New conversation
+                <SquarePen className="size-3.5" />{" "}{t("New conversation")}
               </button>
             </div>
           ) : null}

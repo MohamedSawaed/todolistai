@@ -14,6 +14,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { Category } from "@/lib/types";
+import { usePrefs } from "./providers";
 
 export const cx = clsx;
 
@@ -194,6 +195,7 @@ export function Sheet({
   description?: string;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  const { t } = usePrefs();
   const titleId = useId();
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -207,7 +209,7 @@ export function Sheet({
       const el = panel.current?.querySelector<HTMLElement>("[data-autofocus], input, textarea, select, button:not([data-close])");
       el?.focus();
     };
-    const t = setTimeout(focusFirst, 30);
+    const focusTimer = setTimeout(focusFirst, 30);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
@@ -233,7 +235,7 @@ export function Sheet({
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      clearTimeout(t);
+      clearTimeout(focusTimer);
       document.removeEventListener("keydown", onKey, true);
       document.body.style.overflow = overflow;
       previous?.focus?.();
@@ -262,7 +264,7 @@ export function Sheet({
             </h2>
             {description ? <p className="mt-0.5 text-[13px] text-ink-2">{description}</p> : null}
           </div>
-          <Button data-close variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close" className="-me-1.5">
+          <Button data-close variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("Close")} className="-me-1.5">
             <X className="size-4" />
           </Button>
         </div>

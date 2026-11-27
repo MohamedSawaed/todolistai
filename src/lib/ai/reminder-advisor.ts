@@ -5,6 +5,7 @@ import type { Category, Preferences } from "../types";
 import { AI_MODEL } from "../config";
 import { describeReminders, matchReminderRule } from "../reminders";
 import { zReminders } from "../schemas";
+import { languageName } from "../i18n";
 
 let client: Anthropic | null = null;
 const getClient = () => (client ??= new Anthropic());
@@ -25,7 +26,7 @@ const outSchema = z.object({ reminders: zReminders, reason: z.string().max(160) 
 const cache = new Map<string, { reminders: number[]; reason: string }>();
 
 export async function adviseReminders(input: { title: string; category: Category; description?: string | null; durationMinutes?: number }, prefs: Preferences) {
-  const key = JSON.stringify([input.title.trim().toLowerCase(), input.category, input.description ?? "", prefs.reminderRules.map((r) => [r.id, r.reminders])]);
+  const key = JSON.stringify([prefs.locale, input.title.trim().toLowerCase(), input.category, input.description ?? "", prefs.reminderRules.map((r) => [r.id, r.reminders])]);
   const hit = cache.get(key);
   if (hit) return hit;
 
@@ -44,7 +45,7 @@ ${rules}
 Default when nothing fits: ${prefs.notifications.defaultReminder === null ? "no reminder" : describeReminders([prefs.notifications.defaultReminder])}
 </user_rules>
 Keyword rule that matched: ${rule ? `${rule.label} → ${describeReminders(rule.reminders)}` : "none"}.
-Give the best reminders and a short reason (max 12 words) the user will see.`,
+Give the best reminders and a short reason (max 12 words) the user will see, written in ${languageName(prefs.locale)}.`,
       },
     ],
     thinking: { type: "adaptive" },

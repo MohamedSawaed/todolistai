@@ -1,5 +1,8 @@
 "use client";
-import type { ReactNode } from "react";
+import { DateTime } from "luxon";
+import { fmtDate } from "@/lib/client/format";
+import { usePrefs } from "./providers";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { Field, Input, Select, Segmented } from "./ui";
 import type { Preferences } from "@/lib/types";
 
@@ -21,13 +24,23 @@ export function Section({ title, description, children }: { title: string; descr
   );
 }
 
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+// ISO weekdays 1..7 starting from a known Monday, named in the user's language
+const MONDAY = DateTime.fromISO("2024-01-01");
+
+// The server's and the browser's timezone lists can differ slightly, so the full list is
+// only rendered in the browser (avoids a mismatch when the page loads).
+let zoneCache: string[] | null = null;
+const browserZones = () => (zoneCache ??= timezones());
+const noZoneSubscribe = () => () => undefined;
 
 export function TimezoneField({ value, onChange }: { value: string; onChange: (z: string) => void }) {
+  const { t } = usePrefs();
+  const all = useSyncExternalStore(noZoneSubscribe, browserZones, () => null);
+  const zones = all ? (all.includes(value) ? all : [value, ...all]) : [value];
   return (
-    <Field label="Timezone" htmlFor="pref-tz" hint="Times are stored safely and always shown in this zone.">
+    <Field label={t("Timezone")} htmlFor="pref-tz" hint={t("Times are stored safely and always shown in this zone.")}>
       <Select id="pref-tz" value={value} onChange={(e) => onChange(e.target.value)}>
-        {timezones().map((z) => (
+        {zones.map((z) => (
           <option key={z} value={z}>
             {z.replace(/_/g, " ")}
           </option>
@@ -38,31 +51,34 @@ export function TimezoneField({ value, onChange }: { value: string; onChange: (z
 }
 
 export function LanguageField({ value, onChange }: { value: Preferences["locale"]; onChange: (l: Preferences["locale"]) => void }) {
+  const { t } = usePrefs();
   return (
-    <Field label="Language" htmlFor="pref-lang" hint={value !== "en" ? "Right-to-left layout is active. Full translation is in progress." : undefined}>
+    <Field label={t("Language")} htmlFor="pref-lang" hint={t("The whole app, including the assistant, uses this language.")}>
       <Select id="pref-lang" value={value} onChange={(e) => onChange(e.target.value as Preferences["locale"])}>
         <option value="en">English</option>
-        <option value="ar">العربية (Arabic — preview)</option>
-        <option value="he">עברית (Hebrew — preview)</option>
+        <option value="ar">العربية</option>
+        <option value="he">עברית</option>
       </Select>
     </Field>
   );
 }
 
 export function AvailabilityFields({ prefs, set }: { prefs: Preferences; set: (p: Preferences) => void }) {
+  const { t } = usePrefs();
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Work starts">
+        <Field label={t("Work starts")}>
           <Input type="time" value={prefs.workHours.start} onChange={(e) => set({ ...prefs, workHours: { ...prefs.workHours, start: e.target.value } })} />
         </Field>
-        <Field label="Work ends">
+        <Field label={t("Work ends")}>
           <Input type="time" value={prefs.workHours.end} onChange={(e) => set({ ...prefs, workHours: { ...prefs.workHours, end: e.target.value } })} />
         </Field>
       </div>
-      <Field label="Work days">
+      <Field label={t("Work days")}>
         <div className="flex flex-wrap gap-1.5">
-          {DAYS.map((d, i) => {
+          {[0, 1, 2, 3, 4, 5, 6].map((i) => {
+            const d = fmtDate(MONDAY.plus({ days: i }), prefs.locale, "weekdayShort");
             const iso = i + 1;
             const on = prefs.workHours.days.includes(iso);
             return (
@@ -82,10 +98,10 @@ export function AvailabilityFields({ prefs, set }: { prefs: Preferences; set: (p
         </div>
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Usually asleep from">
+        <Field label={t("Usually asleep from")}>
           <Input type="time" value={prefs.sleepHours.start} onChange={(e) => set({ ...prefs, sleepHours: { ...prefs.sleepHours, start: e.target.value } })} />
         </Field>
-        <Field label="Until">
+        <Field label={t("Until")}>
           <Input type="time" value={prefs.sleepHours.end} onChange={(e) => set({ ...prefs, sleepHours: { ...prefs.sleepHours, end: e.target.value } })} />
         </Field>
       </div>
@@ -94,8 +110,9 @@ export function AvailabilityFields({ prefs, set }: { prefs: Preferences; set: (p
 }
 
 export function ClockField({ value, onChange }: { value: Preferences["clock"]; onChange: (c: Preferences["clock"]) => void }) {
+  const { t } = usePrefs();
   return (
-    <Field label="Clock">
+    <Field label={t("Clock")}>
       <Segmented
         value={value}
         onChange={onChange}

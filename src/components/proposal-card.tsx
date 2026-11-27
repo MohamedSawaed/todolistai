@@ -9,18 +9,20 @@ import { api, ApiError } from "@/lib/client/api";
 import { useInvalidateAll } from "@/lib/client/hooks";
 import { fmtRelativeDay, fmtSlot, fmtTime, fmtTimeRange, dt } from "@/lib/client/format";
 import { describeReminders } from "@/lib/reminders";
+import { countLabel, msg, type TFunction } from "@/lib/i18n";
 import type { Interval, Proposal } from "@/lib/types";
 
 type ConfirmResponse = { status: "applied" | "conflict" | "stale"; proposal: Proposal; message?: string };
 
 export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpdate: (p: Proposal) => void }) {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const p = proposal.payload;
+  const showValue = (k: string, v: unknown) => changeValue(k, v, t, prefs);
   const expired = proposal.status === "pending" && Date.parse(proposal.expiresAt) < Date.now();
   const pending = proposal.status === "pending" && !expired;
 
@@ -31,15 +33,15 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
       const res = await api<ConfirmResponse | { status: string; proposal: Proposal }>(`/api/proposals/${proposal.id}`, { method: "POST", body: { action, ...extra } });
       onUpdate(res.proposal);
       if (action !== "cancel") await invalidate();
-      if (action === "confirm") toast({ message: successMessage(proposal), action: { label: "Undo", onClick: () => void act("undo") } });
-      if (action === "undo") toast({ message: "Change undone" });
+      if (action === "confirm") toast({ message: successMessage(proposal, t), action: { label: t("Undo"), onClick: () => void act("undo") } });
+      if (action === "undo") toast({ message: t("Change undone") });
     } catch (err) {
       if (err instanceof ApiError && (err.body.status === "conflict" || err.body.status === "stale")) {
         // the server re-checked the calendar at write time and found a problem; nothing was saved
         onUpdate(err.body.proposal as Proposal);
-        setNotice(String(err.body.message ?? err.message));
+        setNotice(t(String(err.body.message ?? err.message)));
         await invalidate();
-      } else setNotice(err instanceof Error ? err.message : "Something went wrong. Nothing was changed.");
+      } else setNotice(err instanceof Error ? t(err.message) : t("Something went wrong. Nothing was changed."));
     } finally {
       setBusy(null);
     }
@@ -58,13 +60,13 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
       <div className="mt-3.5 flex flex-wrap items-center gap-2">
         {primary}
         <Button size="sm" variant="ghost" loading={busy === "cancel"} onClick={() => act("cancel")}>
-          Cancel
+          {t("Cancel")}
         </Button>
       </div>
     ) : proposal.status === "applied" ? (
       <div className="mt-3 flex items-center gap-2">
         <Button size="sm" variant="ghost" loading={busy === "undo"} onClick={() => act("undo")}>
-          <Undo2 className="size-3.5" /> Undo
+          <Undo2 className="size-3.5" />{" "}{t("Undo")}
         </Button>
       </div>
     ) : null;
@@ -76,20 +78,20 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
       const hasConflict = p.conflicts.length > 0;
       body = (
         <>
-          {header(<CalendarPlus className="size-3.5" />, "New event")}
+          {header(<CalendarPlus className="size-3.5" />, t("New event"))}
           <div data-cat={p.event.category} className="flex gap-3">
             <span className="w-1 shrink-0 rounded-full bg-[var(--c)]" aria-hidden />
             <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold">{p.event.title}</p>
               <p className="tabular mt-0.5 text-[13.5px] text-ink-2">{fmtSlot(p.event.startAt, p.event.endAt, prefs)}</p>
               <p className="mt-1 flex items-center gap-1.5 text-[12.5px] text-ink-2">
-                <Bell className="size-3" /> {describeReminders(p.event.reminders ?? [])}
+                <Bell className="size-3" /> {describeReminders(p.event.reminders ?? [], prefs.locale)}
               </p>
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-2">
                 <span className="inline-flex items-center gap-1 text-[var(--c-ink)]">
-                  <meta.icon className="size-3" /> {meta.label}
+                  <meta.icon className="size-3" /> {t(meta.label)}
                 </span>
-                <span>{p.event.flexibility === "fixed" ? "Fixed" : "Flexible"}</span>
+                <span>{p.event.flexibility === "fixed" ? t("Fixed") : t("Flexible")}</span>
                 {p.event.location ? (
                   <span className="inline-flex items-center gap-1">
                     <MapPin className="size-3" />
@@ -117,19 +119,19 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
             hasConflict ? (
               <>
                 <Button size="sm" variant="secondary" loading={busy === "overlap"} onClick={() => act("confirm", { allowOverlap: true }, "overlap")}>
-                  Add anyway (overlap)
+                  {t("Add anyway (overlap)")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-                  Change time
+                  {t("Change time")}
                 </Button>
               </>
             ) : (
               <>
                 <Button size="sm" variant="primary" loading={busy === "confirm"} onClick={() => act("confirm")}>
-                  <Check className="size-3.5" /> Add to calendar
+                  <Check className="size-3.5" />{" "}{t("Add to calendar")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-                  Change time
+                  {t("Change time")}
                 </Button>
               </>
             ),
@@ -142,13 +144,13 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
       const hasConflict = p.conflicts.length > 0;
       body = (
         <>
-          {header(<Wand2 className="size-3.5" />, "Reschedule")}
+          {header(<Wand2 className="size-3.5" />, t("Reschedule"))}
           <p className="text-[15px] font-semibold">{p.move.title}</p>
           <BeforeAfter before={p.move.before} after={p.move.after} />
           {p.externalBookingWarning ? (
             <p className="mt-2.5 flex items-start gap-1.5 text-[12.5px] text-ink-2">
               <Info className="mt-0.5 size-3.5 shrink-0" />
-              This only moves your calendar entry. Remember to reschedule with the other person or provider too.
+              {t("This only moves your calendar entry. Remember to reschedule with the other person or provider too.")}
             </p>
           ) : null}
           {hasConflict && pending ? <ConflictBox conflicts={p.conflicts} /> : null}
@@ -158,11 +160,11 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
           {footer(
             hasConflict ? (
               <Button size="sm" variant="secondary" loading={busy === "overlap"} onClick={() => act("confirm", { allowOverlap: true }, "overlap")}>
-                Move anyway (overlap)
+                {t("Move anyway (overlap)")}
               </Button>
             ) : (
               <Button size="sm" variant="primary" loading={busy === "confirm"} onClick={() => act("confirm")}>
-                <Check className="size-3.5" /> Move event
+                <Check className="size-3.5" />{" "}{t("Move event")}
               </Button>
             ),
           )}
@@ -173,7 +175,7 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
     case "reorganize":
       body = (
         <>
-          {header(<Wand2 className="size-3.5" />, `Reorganize ${fmtRelativeDay(p.date, prefs)}`)}
+          {header(<Wand2 className="size-3.5" />, t("Reorganize {day}", { day: fmtRelativeDay(p.date, prefs) }))}
           <p className="text-[13.5px] text-ink-2">{p.rationale}</p>
           <ul className="mt-3 space-y-2.5">
             {p.moves.map((m) => (
@@ -185,7 +187,7 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
           </ul>
           {footer(
             <Button size="sm" variant="primary" loading={busy === "confirm"} onClick={() => act("confirm")}>
-              <Check className="size-3.5" /> Apply {p.moves.length} change{p.moves.length > 1 ? "s" : ""}
+              <Check className="size-3.5" /> {t("Apply {count}", { count: countLabel(t, p.moves.length, "change") })}
             </Button>,
           )}
         </>
@@ -194,12 +196,12 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
     case "delete_event":
       body = (
         <>
-          {header(<Trash2 className="size-3.5" />, "Delete event")}
+          {header(<Trash2 className="size-3.5" />, t("Delete event"))}
           <p className="text-[15px] font-semibold">{p.event.title}</p>
           <p className="tabular mt-0.5 text-[13.5px] text-ink-2">{fmtSlot(p.event.startAt, p.event.endAt, prefs)}</p>
           {footer(
             <Button size="sm" variant="danger" loading={busy === "confirm"} onClick={() => act("confirm")}>
-              Delete
+              {t("Delete")}
             </Button>,
           )}
         </>
@@ -208,12 +210,12 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
     case "create_task":
       body = (
         <>
-          {header(<CheckSquare className="size-3.5" />, "New task")}
+          {header(<CheckSquare className="size-3.5" />, t("New task"))}
           <p className="text-[15px] font-semibold">{p.task.title}</p>
           <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-ink-2">
-            <span>{p.task.dueDate ? `Due ${fmtRelativeDay(p.task.dueDate, prefs)}${p.task.dueTime ? ` at ${p.task.dueTime}` : ""}` : "No due date"}</span>
-            <span className={PRIORITY_META[p.task.priority].tone}>{PRIORITY_META[p.task.priority].label} priority</span>
-            <span>{CATEGORY_META[p.task.category].label}</span>
+            <span>{p.task.dueDate ? (p.task.dueTime ? t("Due {day} at {time}", { day: fmtRelativeDay(p.task.dueDate, prefs), time: p.task.dueTime }) : t("Due {day}", { day: fmtRelativeDay(p.task.dueDate, prefs) })) : t("No due date")}</span>
+            <span className={PRIORITY_META[p.task.priority].tone}>{t("{level} priority", { level: t(PRIORITY_META[p.task.priority].label) })}</span>
+            <span>{t(CATEGORY_META[p.task.category].label)}</span>
           </p>
           {p.task.subtasks.length ? (
             <ul className="mt-2 list-inside list-disc text-[13px] text-ink-2">
@@ -224,7 +226,7 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
           ) : null}
           {footer(
             <Button size="sm" variant="primary" loading={busy === "confirm"} onClick={() => act("confirm")}>
-              <Check className="size-3.5" /> Add task
+              <Check className="size-3.5" />{" "}{t("Add task")}
             </Button>,
           )}
         </>
@@ -233,21 +235,21 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
     case "update_task":
       body = (
         <>
-          {header(<CheckSquare className="size-3.5" />, "Update task")}
+          {header(<CheckSquare className="size-3.5" />, t("Update task"))}
           <p className="text-[15px] font-semibold">{p.title}</p>
           <ul className="mt-1.5 space-y-1 text-[13px]">
             {Object.entries(p.changes).map(([k, v]) => (
               <li key={k} className="flex flex-wrap items-center gap-1.5 text-ink-2">
-                <span className="text-ink-3">{labelFor(k)}:</span>
-                <span className="line-through decoration-ink-3/60">{String((p.before as Record<string, unknown>)[k] ?? "none")}</span>
+                <span className="text-ink-3">{t(labelFor(k))}:</span>
+                <span className="line-through decoration-ink-3/60">{showValue(k, (p.before as Record<string, unknown>)[k])}</span>
                 <ArrowRight className="size-3" />
-                <span className="font-medium text-ink">{String(v ?? "none")}</span>
+                <span className="font-medium text-ink">{showValue(k, v)}</span>
               </li>
             ))}
           </ul>
           {footer(
             <Button size="sm" variant="primary" loading={busy === "confirm"} onClick={() => act("confirm")}>
-              <Check className="size-3.5" /> Apply
+              <Check className="size-3.5" />{" "}{t("Apply")}
             </Button>,
           )}
         </>
@@ -256,17 +258,17 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
     case "update_reminders":
       body = (
         <>
-          {header(<Bell className="size-3.5" />, "Change reminders")}
+          {header(<Bell className="size-3.5" />, t("Change reminders"))}
           <p className="text-[15px] font-semibold">{p.title}</p>
           <p className="tabular text-[12.5px] text-ink-2">{fmtRelativeDay(dt(p.startAt, prefs).toISODate()!, prefs)} · {fmtTime(p.startAt, prefs)}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
-            <span className="rounded-lg bg-surface-2 px-2 py-1 text-ink-2 line-through decoration-ink-3/60">{describeReminders(p.before)}</span>
+            <span className="rounded-lg bg-surface-2 px-2 py-1 text-ink-2 line-through decoration-ink-3/60">{describeReminders(p.before, prefs.locale)}</span>
             <ArrowRight className="size-3.5 text-ink-3 rtl:rotate-180" />
-            <span className="rounded-lg bg-primary-soft px-2 py-1 font-medium text-primary-ink">{describeReminders(p.after)}</span>
+            <span className="rounded-lg bg-primary-soft px-2 py-1 font-medium text-primary-ink">{describeReminders(p.after, prefs.locale)}</span>
           </div>
           {footer(
             <Button size="sm" variant="primary" loading={busy === "confirm"} onClick={() => act("confirm")}>
-              <Check className="size-3.5" /> Update reminders
+              <Check className="size-3.5" />{" "}{t("Update reminders")}
             </Button>,
           )}
         </>
@@ -275,13 +277,13 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
     case "create_note":
       body = (
         <>
-          {header(<StickyNote className="size-3.5" />, "New note")}
+          {header(<StickyNote className="size-3.5" />, t("New note"))}
           <p className="text-[15px] font-semibold">{p.note.title}</p>
           {p.note.date ? <p className="text-[12.5px] text-ink-2">{fmtRelativeDay(p.note.date, prefs)}</p> : null}
           {p.note.content ? <p className="mt-1.5 line-clamp-4 text-[13px] whitespace-pre-wrap text-ink-2">{p.note.content}</p> : null}
           {footer(
             <Button size="sm" variant="primary" loading={busy === "confirm"} onClick={() => act("confirm")}>
-              <Check className="size-3.5" /> Save note
+              <Check className="size-3.5" />{" "}{t("Save note")}
             </Button>,
           )}
         </>
@@ -307,62 +309,71 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
   );
 }
 
-function labelFor(k: string) {
-  return ({ dueDate: "Due date", dueTime: "Due time", status: "Status", priority: "Priority", title: "Title" } as Record<string, string>)[k] ?? k;
+function changeValue(k: string, v: unknown, t: TFunction, prefs: Parameters<typeof fmtRelativeDay>[1]): string {
+  if (v === null || v === undefined || v === "") return t("none");
+  if (k === "status") return v === "completed" ? t("Completed") : t("Open");
+  if (k === "priority" && typeof v === "string" && v in PRIORITY_META) return t(PRIORITY_META[v as keyof typeof PRIORITY_META].label);
+  if (k === "dueDate" && typeof v === "string") return fmtRelativeDay(v, prefs);
+  return String(v);
 }
 
-function successMessage(p: Proposal): string {
+function labelFor(k: string) {
+  return ({ dueDate: msg("Due date"), dueTime: msg("Due time"), status: msg("Status"), priority: msg("Priority"), title: msg("Title") } as Record<string, string>)[k] ?? k;
+}
+
+function successMessage(p: Proposal, t: TFunction): string {
   switch (p.payload.kind) {
     case "create_event":
-      return `“${p.payload.event.title}” added to your calendar`;
+      return t("“{title}” added to your calendar", { title: p.payload.event.title });
     case "move_event":
-      return `“${p.payload.move.title}” moved`;
+      return t("“{title}” moved", { title: p.payload.move.title });
     case "reorganize":
-      return "Your day was reorganized";
+      return t("Your day was reorganized");
     case "delete_event":
-      return `“${p.payload.event.title}” deleted`;
+      return t("“{title}” deleted", { title: p.payload.event.title });
     case "create_task":
-      return `Task “${p.payload.task.title}” added`;
+      return t("Task “{title}” added", { title: p.payload.task.title });
     case "update_task":
-      return `Task “${p.payload.title}” updated`;
+      return t("Task “{title}” updated", { title: p.payload.title });
     case "create_note":
-      return "Note saved";
+      return t("Note saved");
     case "update_reminders":
-      return `Reminders updated for “${p.payload.title}”`;
+      return t("Reminders updated for “{title}”", { title: p.payload.title });
   }
 }
 
 function StatusBadge({ proposal, expired }: { proposal: Proposal; expired: boolean }) {
-  if (expired) return <Badge className="ms-auto normal-case">Expired</Badge>;
+  const { t } = usePrefs();
+  if (expired) return <Badge className="ms-auto normal-case">{t("Expired")}</Badge>;
   switch (proposal.status) {
     case "applied":
       return (
         <Badge tone="success" className="ms-auto normal-case">
-          <Check className="size-3" /> Saved
+          <Check className="size-3" />{" "}{t("Saved")}
         </Badge>
       );
     case "cancelled":
-      return <Badge className="ms-auto normal-case">Dismissed</Badge>;
+      return <Badge className="ms-auto normal-case">{t("Dismissed")}</Badge>;
     case "undone":
-      return <Badge className="ms-auto normal-case">Undone</Badge>;
+      return <Badge className="ms-auto normal-case">{t("Undone")}</Badge>;
     case "expired":
-      return <Badge className="ms-auto normal-case">Expired</Badge>;
+      return <Badge className="ms-auto normal-case">{t("Expired")}</Badge>;
     default:
       return (
         <Badge tone="primary" className="ms-auto normal-case">
-          Needs your OK
+          {t("Needs your OK")}
         </Badge>
       );
   }
 }
 
 function ConflictBox({ conflicts }: { conflicts: { id: string; title: string; startAt: string; endAt: string }[] }) {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   return (
     <p className="mt-3 flex items-start gap-2 rounded-xl bg-warning-soft px-3 py-2 text-[13px] text-ink">
       <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" />
       <span>
-        Overlaps{" "}
+        {t("Overlaps")}{" "}
         {conflicts.map((c, i) => (
           <span key={c.id}>
             {i ? ", " : ""}
@@ -375,10 +386,10 @@ function ConflictBox({ conflicts }: { conflicts: { id: string; title: string; st
 }
 
 function AlternativeList({ alternatives, busy, onPick }: { alternatives: (Interval & { reason?: string })[]; busy: string | null; onPick: (s: Interval, i: number) => void }) {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   return (
     <div className="mt-3 space-y-1.5">
-      <p className="text-[12px] font-medium text-ink-3">Free times from your calendar</p>
+      <p className="text-[12px] font-medium text-ink-3">{t("Free times from your calendar")}</p>
       {alternatives.map((s, i) => (
         <button
           key={s.start}
@@ -390,7 +401,7 @@ function AlternativeList({ alternatives, busy, onPick }: { alternatives: (Interv
             <span className="tabular font-medium">{fmtSlot(s.start, s.end, prefs)}</span>
             {s.reason ? <span className="block text-[12px] text-ink-3">{s.reason}</span> : null}
           </span>
-          <span className="shrink-0 text-[12.5px] font-medium text-primary">{busy === `alt${i}` ? "Saving…" : "Use this"}</span>
+          <span className="shrink-0 text-[12.5px] font-medium text-primary">{busy === `alt${i}` ? t("Saving…") : t("Use this")}</span>
         </button>
       ))}
     </div>
@@ -409,7 +420,7 @@ function BeforeAfter({ before, after, compact }: { before: Interval; after: Inte
 }
 
 function TimeEditor({ initial, onSave, onCancel }: { initial: Interval; onSave: (s: Interval) => void; onCancel: () => void }) {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const zone = prefs.timezone;
   const s0 = dt(initial.start, prefs);
   const e0 = dt(initial.end, prefs);
@@ -418,12 +429,12 @@ function TimeEditor({ initial, onSave, onCancel }: { initial: Interval; onSave: 
   const [end, setEnd] = useState(e0.toFormat("HH:mm"));
   return (
     <div className="mt-3 grid animate-rise grid-cols-[1.3fr_1fr_1fr] gap-2 rounded-xl bg-surface-2 p-2.5">
-      <Input type="date" aria-label="Date" value={date} onChange={(e) => setDate(e.target.value)} />
-      <Input type="time" aria-label="Start" value={start} onChange={(e) => setStart(e.target.value)} />
-      <Input type="time" aria-label="End" value={end} onChange={(e) => setEnd(e.target.value)} />
+      <Input type="date" aria-label={t("Date")} value={date} onChange={(e) => setDate(e.target.value)} />
+      <Input type="time" aria-label={t("Start")} value={start} onChange={(e) => setStart(e.target.value)} />
+      <Input type="time" aria-label={t("End")} value={end} onChange={(e) => setEnd(e.target.value)} />
       <div className="col-span-3 flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onCancel}>
-          Back
+          {t("Back")}
         </Button>
         <Button
           size="sm"
@@ -435,7 +446,7 @@ function TimeEditor({ initial, onSave, onCancel }: { initial: Interval; onSave: 
             onSave({ start: s.toUTC().toISO()!, end: e.toUTC().toISO()! });
           }}
         >
-          Save at this time
+          {t("Save at this time")}
         </Button>
       </div>
     </div>

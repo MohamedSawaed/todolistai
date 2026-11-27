@@ -1,4 +1,5 @@
 "use client";
+import { msg } from "../i18n";
 
 /**
  * System notifications. Android Chrome only allows notifications shown through a
@@ -18,7 +19,7 @@ async function readyRegistration(timeoutMs = 8000): Promise<ServiceWorkerRegistr
 }
 
 export async function enableNotifications(): Promise<NotifyResult> {
-  if (typeof Notification === "undefined") return { ok: false, reason: "This browser doesn't support notifications. On Android, open Tempo in Chrome." };
+  if (typeof Notification === "undefined") return { ok: false, reason: msg("This browser doesn't support notifications. On Android, open Tempo in Chrome.") };
   if (Notification.permission === "denied") return { ok: false, reason: blockedHelp() };
   const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   if (perm !== "granted") return { ok: false, reason: blockedHelp() };
@@ -27,7 +28,7 @@ export async function enableNotifications(): Promise<NotifyResult> {
 }
 
 export async function showSystemNotification(title: string, body: string, tag?: string): Promise<NotifyResult> {
-  if (typeof Notification === "undefined") return { ok: false, reason: "This browser doesn't support notifications." };
+  if (typeof Notification === "undefined") return { ok: false, reason: msg("This browser doesn't support notifications.") };
   if (Notification.permission !== "granted") return { ok: false, reason: blockedHelp() };
   const reg = await readyRegistration();
   try {
@@ -38,7 +39,7 @@ export async function showSystemNotification(title: string, body: string, tag?: 
     new Notification(title, { body, tag, icon: "/icon-192.png" }); // desktop browsers without a service worker
     return { ok: true };
   } catch (e) {
-    return { ok: false, reason: `The notification couldn't be shown (${e instanceof Error ? e.message : "unknown error"}). Reload Tempo and try again.` };
+    return { ok: false, reason: msg("The notification couldn't be shown. Reload Tempo and try again.") };
   }
 }
 
@@ -64,16 +65,16 @@ export async function subscribeToPush(): Promise<NotifyResult> {
   const perm = await enableNotifications();
   if (!perm.ok) return perm;
   const reg = await readyRegistration();
-  if (!reg || !("pushManager" in reg)) return { ok: false, reason: "This browser can't receive notifications while closed. On iPhone, add Tempo to the Home Screen first." };
+  if (!reg || !("pushManager" in reg)) return { ok: false, reason: msg("This browser can't receive notifications while closed. On iPhone, add Tempo to the Home Screen first.") };
   try {
     const sub =
       (await reg.pushManager.getSubscription()) ??
       (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) }));
     const res = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub.toJSON()) });
-    if (!res.ok) return { ok: false, reason: ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't register this device." };
+    if (!res.ok) return { ok: false, reason: ((await res.json().catch(() => ({}))) as { error?: string }).error ?? msg("Couldn't register this device.") };
     return { ok: true };
   } catch (e) {
-    return { ok: false, reason: `Couldn't turn on notifications for this device (${e instanceof Error ? e.message : "unknown error"}).` };
+    return { ok: false, reason: msg("Couldn't turn on notifications for this device.") };
   }
 }
 
@@ -91,9 +92,9 @@ export async function sendServerTestPush(): Promise<NotifyResult> {
   if (!sub.ok) return sub;
   const res = await fetch("/api/push/test", { method: "POST" });
   if (res.ok) return { ok: true };
-  return { ok: false, reason: ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "The server couldn't send a test notification." };
+  return { ok: false, reason: ((await res.json().catch(() => ({}))) as { error?: string }).error ?? msg("The server couldn't send a test notification.") };
 }
 
 function blockedHelp(): string {
-  return "Notifications are blocked for Tempo. On Android: long-press the Tempo icon → App info → Notifications → allow. In Chrome: ⋮ → Settings → Site settings → Notifications → allow this site.";
+  return msg("Notifications are blocked for Tempo. On Android: long-press the Tempo icon → App info → Notifications → allow. In Chrome: ⋮ → Settings → Site settings → Notifications → allow this site.");
 }

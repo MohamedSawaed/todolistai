@@ -5,11 +5,13 @@ import { AlertTriangle, Check, Lock } from "lucide-react";
 import { usePrefs } from "../providers";
 import { cx } from "../ui";
 import { layoutColumns } from "@/lib/scheduling/engine";
-import { fmtTime, fmtTimeRange } from "@/lib/client/format";
+import { fmtDate, fmtTime, fmtTimeRange } from "@/lib/client/format";
 import { intlLocale } from "@/lib/i18n";
 import type { CalendarEvent } from "@/lib/types";
 
 const SNAP = 15;
+/** Minimum visible height of an event block, so short events stay readable and tappable. */
+const MIN_BLOCK_PX = 40;
 
 interface Props {
   days: string[]; // local ISO dates
@@ -33,7 +35,7 @@ interface Drag {
 }
 
 export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Props) {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const zone = prefs.timezone;
   const scroller = useRef<HTMLDivElement>(null);
   const columnsRef = useRef<(HTMLDivElement | null)[]>([]);
@@ -77,7 +79,10 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
         const s = ds.toMillis();
         const e = ds.plus({ days: 1 }).toMillis();
         const list = events.filter((ev) => Date.parse(ev.startAt) < e && Date.parse(ev.endAt) > s);
-        const layout = layoutColumns(list);
+        const minVisualMs = (MIN_BLOCK_PX / pxPerMin) * 60000;
+        const layout = layoutColumns(
+          list.map((ev) => ({ ...ev, endAt: new Date(Math.max(Date.parse(ev.endAt), Date.parse(ev.startAt) + minVisualMs)).toISOString() })),
+        );
         return list.map((ev) => {
           const st = Math.max(Date.parse(ev.startAt), s);
           const en = Math.min(Date.parse(ev.endAt), e);
@@ -86,7 +91,7 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
           return { ev, topMin, lenMin, ...(layout.get(ev.id) ?? { col: 0, cols: 1 }) };
         });
       }),
-    [events, dayStarts],
+    [events, dayStarts, pxPerMin],
   );
 
   const minutesFromPointer = (clientY: number, col: HTMLDivElement) => {
@@ -177,7 +182,7 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
                 const loc = d.setLocale(intlLocale(prefs.locale));
                 return (
                   <div key={iso} className="flex flex-col items-center py-2">
-                    <span className={cx("text-[10.5px] font-semibold tracking-wider uppercase", isToday ? "text-primary" : "text-ink-3")}>{loc.toFormat("ccc")}</span>
+                    <span className={cx("text-[10.5px] font-semibold tracking-wider uppercase", isToday ? "text-primary" : "text-ink-3")}>{fmtDate(loc, prefs.locale, "weekdayShort")}</span>
                     <span className={cx("tabular mt-0.5 grid size-8 place-items-center rounded-full text-[15px] font-semibold", isToday && "bg-primary text-white")}>{d.day}</span>
                   </div>
                 );
@@ -190,7 +195,7 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
             <div className="relative">
               {Array.from({ length: 24 }, (_, h) => (
                 <span key={h} className="tabular absolute end-2 -translate-y-1/2 text-[11px] text-ink-3" style={{ top: h * hourH }}>
-                  {h === 0 ? "" : prefs.clock === "12h" ? `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}` : `${String(h).padStart(2, "0")}:00`}
+                  {h === 0 ? "" : prefs.clock === "12h" ? new Intl.DateTimeFormat(intlLocale(prefs.locale), { hour: "numeric", hour12: true }).format(new Date(2024, 0, 1, h)) : `${String(h).padStart(2, "0")}:00`}
                 </span>
               ))}
             </div>
@@ -207,7 +212,7 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
                   onClick={(e) => onColumnClick(di, e)}
                   className={cx("relative cursor-cell border-s border-line", isToday && multi && "bg-primary-soft/25")}
                   role="grid"
-                  aria-label={`Schedule for ${iso}`}
+                  aria-label={t("Schedule for {date}", { date: fmtDate(DateTime.fromISO(iso), prefs.locale, "long") })}
                 >
                   {/* hour lines + work-hours tint */}
                   {Array.from({ length: 24 }, (_, h) => (
@@ -222,7 +227,8 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
                     const isPending = pending?.id === ev.id;
                     const overlapping = cols > 1;
                     // short blocks still get room for one readable line
-                    const height = Math.max(lenMin * pxPerMin - 2, 26);
+                    // short events keep a tappable minimum height; their real time is unchanged
+                    const height = Math.max(lenMin * pxPerMin - 2, MIN_BLOCK_PX);
                     const short = height < 42;
                     const titleLines = Math.max(1, Math.floor((height - (short ? 6 : 24)) / 16));
                     return (
@@ -253,7 +259,7 @@ ${ev.location}` : ""}`}
                           short ? "py-1" : "py-1.5",
                           (isDragging || isPending) && "opacity-35",
                           overlapping && "ring-1 ring-[var(--cat-important)]/50",
-                          ev.completedAt && "opacity-60",
+                          ev.completedAt && "border-line border-s-[var(--c)] bg-surface-2",
                         )}
                         style={{
                           top: topMin * pxPerMin + 1,
@@ -271,7 +277,7 @@ ${ev.location}` : ""}`}
                           </p>
                         ) : null}
                         <p
-                          className={cx("text-[12.5px] leading-4 font-semibold break-words", ev.completedAt && "text-ink-3 line-through")}
+                          className={cx("text-[12.5px] leading-4 font-semibold break-words", ev.completedAt && "text-ink-2 line-through decoration-ink-3")}
                           style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: titleLines, overflow: "hidden" }}
                         >
                           {short && ev.completedAt ? <Check className="me-0.5 inline size-3" aria-hidden /> : null}
@@ -306,7 +312,7 @@ ${ev.location}` : ""}`}
                     })}
 
                   {isToday ? (
-                    <div className="pointer-events-none absolute inset-x-0 z-20 flex items-center" style={{ top: nowTop }} aria-label={`Now, ${fmtTime(new Date(now).toISOString(), prefs)}`}>
+                    <div className="pointer-events-none absolute inset-x-0 z-20 flex items-center" style={{ top: nowTop }} aria-label={t("Now, {time}", { time: fmtTime(new Date(now).toISOString(), prefs) })}>
                       <span className="-ms-1 size-2.5 rounded-full bg-[var(--cat-important)]" />
                       <span className="h-[1.5px] flex-1 bg-[var(--cat-important)]" />
                     </div>

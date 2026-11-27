@@ -6,7 +6,8 @@ import { useAppUI, usePrefs, useToast } from "./providers";
 import { Button, cx } from "./ui";
 import { useEvents, useNow, useTasks } from "@/lib/client/hooks";
 import { serverPushAvailable, showSystemNotification, subscribeToPush } from "@/lib/client/notify";
-import { fmtTime, fmtTimeRange, todayLocal } from "@/lib/client/format";
+import { fmtRelativeDay, fmtTime, fmtTimeRange, todayLocal } from "@/lib/client/format";
+import { translate } from "@/lib/i18n";
 import type { CalendarEvent } from "@/lib/types";
 
 const FIRED_KEY = "tempo.firedReminders";
@@ -37,11 +38,9 @@ function useUpcoming() {
 }
 
 function reminderBody(e: CalendarEvent, minutes: number, prefs: Parameters<typeof fmtTime>[1]): string {
-  if (minutes === 0) return "Starting now";
-  const when = DateTime.fromISO(e.startAt).setZone(prefs.timezone);
-  const today = DateTime.now().setZone(prefs.timezone);
-  const day = when.hasSame(today, "day") ? "today" : when.hasSame(today.plus({ days: 1 }), "day") ? "tomorrow" : when.toFormat("cccc");
-  return `${day} at ${fmtTime(e.startAt, prefs)}${e.location ? ` · ${e.location}` : ""}`;
+  if (minutes === 0) return translate(prefs.locale, "Starting now");
+  const day = fmtRelativeDay(DateTime.fromISO(e.startAt).setZone(prefs.timezone).toISODate()!, prefs);
+  return `${translate(prefs.locale, "{day} at {time}", { day, time: fmtTime(e.startAt, prefs) })}${e.location ? ` · ${e.location}` : ""}`;
 }
 
 /** Show a system notification (via the service worker, which Android requires). */
@@ -88,16 +87,16 @@ export function useReminders() {
         }
       }
     }
-    for (const t of tasks) {
-      if (t.status !== "open" || t.reminderMinutes === null || !t.dueDate || !t.dueTime) continue;
-      const dueAt = DateTime.fromISO(`${t.dueDate}T${t.dueTime}`, { zone: prefs.timezone }).toMillis();
-      const fireAt = dueAt - t.reminderMinutes * 60_000;
-      const key = `t:${t.id}:${t.dueDate}${t.dueTime}:${t.reminderMinutes}`;
-      if (now >= fireAt && now - fireAt < 10 * 60_000 && !fired.has(key)) due.push({ key, title: t.title, body: `Task due at ${t.dueTime}` });
+    for (const task of tasks) {
+      if (task.status !== "open" || task.reminderMinutes === null || !task.dueDate || !task.dueTime) continue;
+      const dueAt = DateTime.fromISO(`${task.dueDate}T${task.dueTime}`, { zone: prefs.timezone }).toMillis();
+      const fireAt = dueAt - task.reminderMinutes * 60_000;
+      const key = `t:${task.id}:${task.dueDate}${task.dueTime}:${task.reminderMinutes}`;
+      if (now >= fireAt && now - fireAt < 10 * 60_000 && !fired.has(key)) due.push({ key, title: task.title, body: translate(prefs.locale, "Task due at {time}", { time: task.dueTime }) });
     }
     for (const d of due) {
       fired.add(d.key);
-      if (prefs.notifications.inApp) toast({ message: `${d.title} — ${d.body}`, action: d.event ? { label: "Open", onClick: () => openEvent(d.event!) } : undefined });
+      if (prefs.notifications.inApp) toast({ message: `${d.title} — ${d.body}`, action: d.event ? { label: translate(prefs.locale, "Open"), onClick: () => openEvent(d.event!) } : undefined });
       // with server push, the phone already got this as a notification — don't show it twice
       if (prefs.notifications.browser && !pushAvailable) void systemNotify(d.title, d.body, d.key);
     }
@@ -106,7 +105,7 @@ export function useReminders() {
 }
 
 export function NotificationBell({ className }: { className?: string }) {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const { openEvent } = useAppUI();
   const { events, tasks, today } = useUpcoming();
   const [open, setOpen] = useState(false);
@@ -136,15 +135,15 @@ export function NotificationBell({ className }: { className?: string }) {
 
   return (
     <div ref={ref} className={cx("relative", className)}>
-      <Button variant="ghost" size="icon-sm" aria-label={`Notifications${count ? ` (${count})` : ""}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Button variant="ghost" size="icon-sm" aria-label={count ? `${t("Notifications")} (${count})` : t("Notifications")} aria-expanded={open} onClick={() => setOpen(!open)}>
         <Bell className="size-[18px]" />
         {count ? <span className="absolute end-1.5 top-1.5 size-2 rounded-full bg-[var(--cat-important)] ring-2 ring-surface" /> : null}
       </Button>
       {open ? (
         <div className="absolute end-0 top-10 z-50 w-[min(340px,calc(100vw-32px))] animate-rise rounded-2xl border border-line bg-surface p-2 shadow-float lg:start-0 lg:end-auto">
-          <p className="px-2.5 pt-1.5 pb-2 text-[13px] font-semibold">Notifications</p>
+          <p className="px-2.5 pt-1.5 pb-2 text-[13px] font-semibold">{t("Notifications")}</p>
           {!items.soon.length && !items.overdue.length && !items.dueToday.length ? (
-            <p className="px-2.5 pb-3 text-[13px] text-ink-2">You&apos;re all caught up.</p>
+            <p className="px-2.5 pb-3 text-[13px] text-ink-2">{t("You're all caught up.")}</p>
           ) : null}
           {items.soon.map((e) => (
             <button
@@ -158,25 +157,25 @@ export function NotificationBell({ className }: { className?: string }) {
               <CalendarClock className="mt-0.5 size-4 text-primary" />
               <span className="min-w-0 text-[13px]">
                 <span className="block truncate font-medium">{e.title}</span>
-                <span className="text-ink-2">Coming up · {fmtTimeRange(e.startAt, e.endAt, prefs)}</span>
+                <span className="text-ink-2">{t("Coming up · {time}", { time: fmtTimeRange(e.startAt, e.endAt, prefs) })}</span>
               </span>
             </button>
           ))}
-          {items.overdue.map((t) => (
-            <a key={t.id} href="/tasks?view=overdue" className="flex items-start gap-2.5 rounded-xl px-2.5 py-2 hover:bg-surface-2">
+          {items.overdue.map((task) => (
+            <a key={task.id} href="/tasks?view=overdue" className="flex items-start gap-2.5 rounded-xl px-2.5 py-2 hover:bg-surface-2">
               <CircleAlert className="mt-0.5 size-4 text-[var(--cat-important)]" />
               <span className="min-w-0 text-[13px]">
-                <span className="block truncate font-medium">{t.title}</span>
-                <span className="text-ink-2">Overdue since {t.dueDate}</span>
+                <span className="block truncate font-medium">{task.title}</span>
+                <span className="text-ink-2">{t("Overdue since {date}", { date: fmtRelativeDay(task.dueDate!, prefs) })}</span>
               </span>
             </a>
           ))}
-          {items.dueToday.map((t) => (
-            <a key={t.id} href="/tasks?view=today" className="flex items-start gap-2.5 rounded-xl px-2.5 py-2 hover:bg-surface-2">
+          {items.dueToday.map((task) => (
+            <a key={task.id} href="/tasks?view=today" className="flex items-start gap-2.5 rounded-xl px-2.5 py-2 hover:bg-surface-2">
               <AlarmClock className="mt-0.5 size-4 text-[var(--cat-learning)]" />
               <span className="min-w-0 text-[13px]">
-                <span className="block truncate font-medium">{t.title}</span>
-                <span className="text-ink-2">Due today{t.dueTime ? ` at ${t.dueTime}` : ""}</span>
+                <span className="block truncate font-medium">{task.title}</span>
+                <span className="text-ink-2">{task.dueTime ? t("Due today at {time}", { time: task.dueTime }) : t("Due today")}</span>
               </span>
             </a>
           ))}
@@ -185,7 +184,7 @@ export function NotificationBell({ className }: { className?: string }) {
               className="mt-1 w-full rounded-xl bg-primary-soft px-3 py-2 text-[12.5px] font-medium text-primary-ink"
               onClick={() => void Notification.requestPermission()}
             >
-              Allow browser notifications
+              {t("Allow browser notifications")}
             </button>
           ) : null}
         </div>

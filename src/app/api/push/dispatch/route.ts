@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { timingSafeEqual } from "crypto";
 import { supabaseEnv } from "@/lib/config";
 import { pushConfigured, sendPush, type PushTarget } from "@/lib/push";
+import { notificationText, type DueNotification } from "@/lib/notification-text";
 
 export const maxDuration = 60;
 
@@ -24,11 +25,13 @@ export async function POST(req: Request) {
   const { data, error } = await sb.rpc("claim_due_notifications", { p_secret: secret });
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  const due = (data ?? []) as (PushTarget & { title: string; body: string; url: string; tag: string })[];
+  const due = (data ?? []) as (PushTarget & DueNotification & { url: string; tag: string; title?: string; body?: string })[];
   let sent = 0;
   await Promise.all(
     due.map(async (n) => {
-      const r = await sendPush(n, { title: n.title, body: n.body, url: n.url, tag: n.tag });
+      // 0004+ returns facts to phrase in the user's language; older databases return ready text
+      const text = n.kind ? notificationText(n) : { title: n.title ?? "Tempo", body: n.body ?? "" };
+      const r = await sendPush(n, { ...text, url: n.url, tag: n.tag });
       if (r.ok) sent++;
       if (r.gone) await sb.rpc("remove_push_subscription", { p_secret: secret, p_endpoint: n.endpoint });
     }),

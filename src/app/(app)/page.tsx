@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { ArrowUp, CalendarPlus, CalendarSearch, CheckSquare, ListRestart, MapPin, MoreHorizontal, Plus, Sparkles, StickyNote, Sun } from "lucide-react";
@@ -9,18 +9,19 @@ import { WeekStrip, weekStart } from "@/components/week-strip";
 import { NotificationBell } from "@/components/notifications";
 import { DailyBriefing } from "@/components/briefing";
 import { FollowUps } from "@/components/follow-ups";
+import { EveningReview } from "@/components/evening-review";
 import { CATEGORY_META, PRIORITY_META } from "@/components/pickers";
 import { useEvents, useNotes, useNow, useTaskMutations, useTasks } from "@/lib/client/hooks";
 import { useEventActions } from "@/lib/client/event-actions";
-import { fmtDuration, fmtRelativeDay, fmtTime, fmtTimeRange, greetingKey, todayLocal } from "@/lib/client/format";
-import { intlLocale } from "@/lib/i18n";
+import { fmtDate, fmtDuration, fmtRelativeDay, fmtTime, fmtTimeRange, greetingText, todayLocal } from "@/lib/client/format";
+import { countLabel, intlLocale, msg } from "@/lib/i18n";
 import type { CalendarEvent } from "@/lib/types";
 
 const QUICK = [
-  { label: "Plan my day", prompt: "Plan my day", icon: Sun },
-  { label: "Find free time", prompt: "When am I free this week for a two-hour block?", icon: CalendarSearch },
-  { label: "Add an appointment", prompt: "", icon: CalendarPlus },
-  { label: "Reorganize tomorrow", prompt: "I have too much to do tomorrow. Help me reorganize.", icon: ListRestart },
+  { label: msg("Plan my day"), prompt: msg("Plan my day"), icon: Sun },
+  { label: msg("Find free time"), prompt: msg("When am I free this week for a two-hour block?"), icon: CalendarSearch },
+  { label: msg("Add an appointment"), prompt: "", icon: CalendarPlus },
+  { label: msg("Reorganize tomorrow"), prompt: msg("I have too much to do tomorrow. Help me reorganize."), icon: ListRestart },
 ];
 
 export default function TodayPage() {
@@ -57,9 +58,17 @@ export default function TodayPage() {
 
   const summary = (() => {
     if (week.isLoading || tasks.isLoading) return null;
-    const when = isToday ? "today" : fmtRelativeDay(selected, prefs).toLowerCase() === "tomorrow" ? "tomorrow" : `on ${fmtRelativeDay(selected, prefs)}`;
-    const a = remaining === 0 ? `Nothing ${isToday ? "left " : ""}on your calendar ${when}` : `You have ${remaining} ${remaining === 1 ? "activity" : "activities"} ${isToday ? "left " : ""}${when}`;
-    const b = openTasks.length ? ` and ${openTasks.length} ${openTasks.length === 1 ? "task" : "tasks"} waiting.` : ".";
+    const day = fmtRelativeDay(selected, prefs);
+    const count = countLabel(t, remaining, "activity");
+    const a =
+      remaining === 0
+        ? isToday
+          ? t("Nothing left on your calendar today.")
+          : t("Nothing on your calendar ({day}).", { day })
+        : isToday
+          ? t("You have {count} left today.", { count })
+          : t("You have {count} ({day}).", { count, day });
+    const b = openTasks.length ? " " + t("{count} waiting.", { count: countLabel(t, openTasks.length, "task") }) : "";
     return a + b;
   })();
 
@@ -74,26 +83,28 @@ export default function TodayPage() {
       {/* header */}
       <header className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[13px] font-medium text-ink-2">{local.toFormat("cccc, LLLL d")}</p>
+          <p className="text-[13px] font-medium text-ink-2">{fmtDate(local, prefs.locale, "long")}</p>
           <h1 className="mt-1 text-[28px] leading-tight font-semibold tracking-tight sm:text-[32px]">
-            {t(greetingKey(zone))}
-            {name ? `, ${name}` : ""}
+            {name ? t("{greeting}, {name}", { greeting: t(greetingText(zone)), name }) : t(greetingText(zone))}
           </h1>
           <p className="mt-1.5 min-h-5 text-[14.5px] text-ink-2">{summary ?? <Skeleton className="h-4 w-64" />}</p>
         </div>
         <div className="flex items-center gap-1 lg:hidden">
           <NotificationBell />
-          <Link href="/settings" aria-label="Settings" className="grid size-9 place-items-center rounded-full bg-primary-soft text-[14px] font-semibold text-primary-ink">
+          <Link href="/settings" aria-label={t("Settings")} className="grid size-9 place-items-center rounded-full bg-primary-soft text-[14px] font-semibold text-primary-ink">
             {(name || "T").slice(0, 1).toUpperCase()}
           </Link>
         </div>
       </header>
 
+      <Suspense fallback={null}>
+        <EveningReview />
+      </Suspense>
       <DailyBriefing />
       <FollowUps />
 
       {/* AI quick composer */}
-      <section className="mt-6" aria-label="Ask the assistant">
+      <section className="mt-6" aria-label={t("Ask the assistant")}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -105,11 +116,11 @@ export default function TodayPage() {
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={t("composer.placeholder")}
-            aria-label={t("composer.placeholder")}
+            placeholder={t("Tell me what you need to do...")}
+            aria-label={t("Tell me what you need to do...")}
             className="h-10 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-ink-3"
           />
-          <Button type="submit" variant="primary" size="icon" aria-label="Send" disabled={!draft.trim()} className="size-10">
+          <Button type="submit" variant="primary" size="icon" aria-label={t("Send")} disabled={!draft.trim()} className="size-10">
             <ArrowUp className="size-4" />
           </Button>
         </form>
@@ -117,14 +128,14 @@ export default function TodayPage() {
           {QUICK.map((q) => (
             <button
               key={q.label}
-              onClick={() => (q.prompt ? submit(q.prompt) : ui.openComposer({ kind: "event", start: undefined }))}
+              onClick={() => (q.prompt ? submit(t(q.prompt)) : ui.openComposer({ kind: "event", start: undefined }))}
               className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-primary/40 hover:text-ink"
             >
-              <q.icon className="size-3.5 text-primary" /> {q.label}
+              <q.icon className="size-3.5 text-primary" /> {t(q.label)}
             </button>
           ))}
         </div>
-        {!status.ai ? <p className="mt-2 text-[12px] text-ink-3">AI isn&apos;t configured on this server yet — you can still plan everything manually.</p> : null}
+        {!status.ai ? <p className="mt-2 text-[12px] text-ink-3">{t("AI isn't configured on this server yet — you can still plan everything manually.")}</p> : null}
       </section>
 
       {/* week strip */}
@@ -133,17 +144,17 @@ export default function TodayPage() {
       </section>
 
       {/* timeline */}
-      <section className="mt-7" aria-label="Schedule">
+      <section className="mt-7" aria-label={t("Schedule")}>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold">{isToday ? "Today’s schedule" : fmtRelativeDay(selected, prefs)}</h2>
+          <h2 className="text-[15px] font-semibold">{isToday ? t("Today’s schedule") : fmtRelativeDay(selected, prefs)}</h2>
           <div className="flex items-center gap-1">
             {!isToday ? (
               <Button variant="ghost" size="sm" onClick={() => setSelected(today)}>
-                Back to today
+                {t("Back to today")}
               </Button>
             ) : null}
             <Button variant="ghost" size="sm" onClick={() => ui.openComposer({ kind: "event", start: defaultStartFor(selected, zone) })}>
-              <Plus className="size-3.5" /> Add
+              <Plus className="size-3.5" />{" "}{t("Add")}
             </Button>
           </div>
         </div>
@@ -157,15 +168,15 @@ export default function TodayPage() {
         ) : dayEvents.length === 0 ? (
           <EmptyState
             icon={<Sun className="size-6" />}
-            title={isToday ? t("today.empty") : "Nothing scheduled this day."}
-            body="Add something yourself, or tell the assistant what you need to get done."
+            title={isToday ? t("Your schedule is clear today.") : t("Nothing scheduled this day.")}
+            body={t("Add something yourself, or tell the assistant what you need to get done.")}
             actions={
               <>
                 <Button variant="primary" onClick={() => ui.openComposer({ kind: "event", start: defaultStartFor(selected, zone) })}>
-                  <Plus className="size-4" /> Add an activity
+                  <Plus className="size-4" />{" "}{t("Add an activity")}
                 </Button>
-                <Button onClick={() => ui.askAssistant(`Help me plan ${isToday ? "today" : fmtRelativeDay(selected, prefs)}`)} disabled={!status.ai}>
-                  <Sparkles className="size-4 text-primary" /> Plan with AI
+                <Button onClick={() => ui.askAssistant(isToday ? t("Help me plan today") : t("Help me plan {day}", { day: fmtRelativeDay(selected, prefs) }))} disabled={!status.ai}>
+                  <Sparkles className="size-4 text-primary" />{" "}{t("Plan with AI")}
                 </Button>
               </>
             }
@@ -181,11 +192,11 @@ export default function TodayPage() {
 
       {/* tasks */}
       {dayTasks.length ? (
-        <section className="mt-8" aria-label="Tasks">
+        <section className="mt-8" aria-label={t("Tasks")}>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[15px] font-semibold">Tasks {isToday ? "for today" : "due"}</h2>
+            <h2 className="text-[15px] font-semibold">{t("Tasks")}{" "}{isToday ? "for today" : "due"}</h2>
             <Link href="/tasks" className="text-[12.5px] font-medium text-primary hover:underline">
-              All tasks
+              {t("All tasks")}
             </Link>
           </div>
           <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
@@ -194,16 +205,16 @@ export default function TodayPage() {
                 <CheckCircle
                   checked={tk.status === "completed"}
                   onChange={(v) => update.mutate({ id: tk.id, patch: { status: v ? "completed" : "open" } })}
-                  label={`Complete ${tk.title}`}
+                  label={t("Complete “{title}”", { title: tk.title })}
                   category={tk.category}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className={cx("truncate text-[14px] font-medium transition-colors", tk.status === "completed" && "text-ink-3 line-through")}>{tk.title}</p>
+                  <p className={cx("truncate text-[14px] font-medium transition-colors", tk.status === "completed" && "text-ink-2 line-through decoration-ink-3")}>{tk.title}</p>
                   <p className="text-[12px] text-ink-2">
-                    {tk.dueDate && tk.dueDate < today ? <span className="text-[var(--cat-important-ink)]">Overdue · </span> : null}
-                    {tk.dueTime ? `Due ${tk.dueTime} · ` : ""}
-                    <span className={PRIORITY_META[tk.priority].tone}>{PRIORITY_META[tk.priority].label}</span>
-                    {tk.sessions.length ? ` · ${tk.sessions.length} session${tk.sessions.length > 1 ? "s" : ""} scheduled` : ""}
+                    {tk.dueDate && tk.dueDate < today ? <span className="text-[var(--cat-important-ink)]">{t("Overdue")} · </span> : null}
+                    {tk.dueTime ? `${t("Due {time}", { time: tk.dueTime })} · ` : ""}
+                    <span className={PRIORITY_META[tk.priority].tone}>{t(PRIORITY_META[tk.priority].label)}</span>
+                    {tk.sessions.length ? ` · ${t("{count} scheduled", { count: countLabel(t, tk.sessions.length, "session") })}` : ""}
                   </p>
                 </div>
               </li>
@@ -214,8 +225,8 @@ export default function TodayPage() {
 
       {/* notes */}
       {notes.data?.length ? (
-        <section className="mt-8" aria-label="Notes">
-          <h2 className="mb-3 text-[15px] font-semibold">Notes</h2>
+        <section className="mt-8" aria-label={t("Notes")}>
+          <h2 className="mb-3 text-[15px] font-semibold">{t("Notes")}</h2>
           <div className="grid gap-2.5 sm:grid-cols-2">
             {notes.data.map((n) => (
               <article key={n.id} className="rounded-2xl border border-line bg-surface p-4">
@@ -231,10 +242,10 @@ export default function TodayPage() {
 
       <div className="mt-8 flex flex-wrap gap-2">
         <Button size="sm" variant="ghost" onClick={() => ui.openComposer({ kind: "task", date: selected })}>
-          <CheckSquare className="size-3.5" /> Add task for this day
+          <CheckSquare className="size-3.5" />{" "}{t("Add task for this day")}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => ui.openComposer({ kind: "note", date: selected })}>
-          <StickyNote className="size-3.5" /> Add note
+          <StickyNote className="size-3.5" />{" "}{t("Add note")}
         </Button>
       </div>
     </div>
@@ -248,7 +259,7 @@ function defaultStartFor(date: string, zone: string): string {
 }
 
 function ActivityCard({ event }: { event: CalendarEvent }) {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const { openEvent } = useAppUI();
   const { setDone } = useEventActions();
   const minutes = Math.round((Date.parse(event.endAt) - Date.parse(event.startAt)) / 60000);
@@ -273,25 +284,25 @@ function ActivityCard({ event }: { event: CalendarEvent }) {
         className={cx(
           "group relative flex min-w-0 flex-1 cursor-pointer items-start gap-3 overflow-hidden rounded-2xl border bg-surface p-3.5 ps-4 text-start transition-all hover:-translate-y-px hover:shadow-soft",
           live ? "border-[var(--c)]/50 ring-4 ring-[var(--c)]/10" : "border-line",
-          done && "opacity-70",
+          done && "bg-surface-2/60",
         )}
       >
         <span className="absolute inset-y-0 start-0 w-1 bg-[var(--c)]" aria-hidden />
         <span className="pt-0.5">
-          <CheckCircle checked={done} onChange={(v) => void setDone(event, v)} label={`Mark ${event.title} ${done ? "not done" : "done"}`} category={event.category} />
+          <CheckCircle checked={done} onChange={(v) => void setDone(event, v)} label={done ? t("Mark “{title}” as not done", { title: event.title }) : t("Mark “{title}” as done", { title: event.title })} category={event.category} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className={cx("text-[14.5px] leading-snug font-semibold break-words transition-colors", done && "text-ink-3 line-through")}>{event.title}</p>
-            {live ? <span className="rounded-full bg-[var(--c-soft)] px-1.5 py-px text-[10.5px] font-semibold text-[var(--c-ink)] uppercase">Now</span> : null}
+            <p className={cx("text-[14.5px] leading-snug font-semibold break-words transition-colors", done && "text-ink-2 line-through decoration-ink-3")}>{event.title}</p>
+            {live ? <span className="rounded-full bg-[var(--c-soft)] px-1.5 py-px text-[10.5px] font-semibold text-[var(--c-ink)] uppercase">{t("Now")}</span> : null}
           </div>
           <p className="tabular mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-ink-2">
             <span>{fmtTimeRange(event.startAt, event.endAt, prefs)}</span>
             <span aria-hidden>·</span>
-            <span>{fmtDuration(minutes)}</span>
+            <span>{fmtDuration(minutes, prefs.locale)}</span>
             <span aria-hidden>·</span>
             <span className="inline-flex items-center gap-1 text-[var(--c-ink)]">
-              <meta.icon className="size-3" /> {meta.label}
+              <meta.icon className="size-3" /> {t(meta.label)}
             </span>
             {event.location ? (
               <span className="inline-flex items-center gap-1">

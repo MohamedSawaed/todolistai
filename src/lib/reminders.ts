@@ -4,6 +4,7 @@
  * order; the first match wins, otherwise the user's default reminder applies.
  */
 import type { Category, Preferences, ReminderRule } from "./types";
+import { msg, translate, type Locale } from "./i18n";
 
 /** Bump when DEFAULT_REMINDER_RULES changes; saved settings are upgraded on load. */
 export const REMINDER_RULES_VERSION = 2;
@@ -12,7 +13,7 @@ export const REMINDER_RULES_VERSION = 2;
 export const DEFAULT_REMINDER_RULES: ReminderRule[] = [
   {
     id: "study",
-    label: "Reading & studying",
+    label: msg("Reading & studying"),
     keywords: [
       "read", "reading", "study", "studying", "homework", "revise", "revision", "review", "lecture", "class", "course", "practice",
       "לקרוא", "קריאה", "ללמוד", "לימוד", "שיעורי בית", "הרצאה", "قراءة", "دراسة", "مذاكرة", "واجب", "محاضرة",
@@ -22,7 +23,7 @@ export const DEFAULT_REMINDER_RULES: ReminderRule[] = [
   },
   {
     id: "calls",
-    label: "Calls",
+    label: msg("Calls"),
     keywords: [
       "call", "calls", "calling", "phone", "ring", "video call", "zoom", "facetime", "whatsapp",
       "שיחה", "להתקשר", "טלפון", "اتصال", "مكالمة", "اتصل",
@@ -32,7 +33,7 @@ export const DEFAULT_REMINDER_RULES: ReminderRule[] = [
   },
   {
     id: "exams",
-    label: "Tests & exams",
+    label: msg("Tests & exams"),
     keywords: [
       "exam", "exams", "test", "tests", "quiz", "midterm", "final exam", "finals", "bagrut", "psychometric",
       "מבחן", "מבחנים", "בחינה", "בוחן", "בגרות", "פסיכומטרי", "امتحان", "اختبار", "فحص نهائي",
@@ -42,7 +43,7 @@ export const DEFAULT_REMINDER_RULES: ReminderRule[] = [
   },
   {
     id: "appointments",
-    label: "Doctor & appointments",
+    label: msg("Doctor & appointments"),
     keywords: [
       "appointment", "appt", "doctor", "dr", "dentist", "dental", "clinic", "hospital", "checkup", "check-up",
       "therapy", "therapist", "physio", "optician", "vet", "lawyer", "bank", "haircut", "barber", "interview",
@@ -54,21 +55,21 @@ export const DEFAULT_REMINDER_RULES: ReminderRule[] = [
   },
   {
     id: "travel",
-    label: "Flights & travel",
+    label: msg("Flights & travel"),
     keywords: ["flight", "airport", "train", "trip", "טיסה", "שדה תעופה", "רכבת", "رحلة", "مطار", "طيران"],
     categories: [],
     reminders: [1440, 180],
   },
   {
     id: "meetings",
-    label: "Meetings",
+    label: msg("Meetings"),
     keywords: ["meeting", "meet", "sync", "standup", "stand-up", "1:1", "one-on-one", "presentation", "פגישה", "اجتماع", "لقاء"],
     categories: [],
     reminders: [15],
   },
   {
     id: "deadlines",
-    label: "Deadlines & important",
+    label: msg("Deadlines & important"),
     keywords: ["deadline", "due", "submit", "submission", "הגשה", "דדליין", "تسليم", "موعد نهائي"],
     categories: ["important"],
     reminders: [1440, 60],
@@ -126,21 +127,34 @@ export function remindersFor(
 
 export const REMINDER_CHOICES = [0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080];
 
-export function formatReminder(minutes: number): string {
-  if (minutes === 0) return "At start time";
-  if (minutes % 10080 === 0) return minutes === 10080 ? "1 week before" : `${minutes / 10080} weeks before`;
-  if (minutes % 1440 === 0) return minutes === 1440 ? "1 day before" : `${minutes / 1440} days before`;
-  if (minutes % 60 === 0) return minutes === 60 ? "1 hour before" : `${minutes / 60} hours before`;
-  return `${minutes} min before`;
+// Arabic has a dual form, so "2 …" gets its own phrase.
+function unit(locale: Locale, n: number, one: string, two: string, many: string): string {
+  return n === 1 ? translate(locale, one) : n === 2 ? translate(locale, two) : translate(locale, many, { n });
 }
 
-export function formatReminderShort(minutes: number): string {
-  if (minutes === 0) return "at start";
-  if (minutes % 1440 === 0) return `${minutes / 1440}d`;
-  if (minutes % 60 === 0) return `${minutes / 60}h`;
-  return `${minutes}m`;
+export function formatReminder(minutes: number, locale: Locale = "en"): string {
+  if (minutes === 0) return translate(locale, "At start time");
+  if (minutes % 10080 === 0) return unit(locale, minutes / 10080, msg("1 week before"), msg("2 weeks before"), msg("{n} weeks before"));
+  if (minutes % 1440 === 0) return unit(locale, minutes / 1440, msg("1 day before"), msg("2 days before"), msg("{n} days before"));
+  if (minutes % 60 === 0) return unit(locale, minutes / 60, msg("1 hour before"), msg("2 hours before"), msg("{n} hours before"));
+  return translate(locale, "{n} min before", { n: minutes });
 }
 
-export function describeReminders(list: number[]): string {
-  return list.length ? list.map(formatReminder).join(", ") : "No reminder";
+export function formatReminderShort(minutes: number, locale: Locale = "en"): string {
+  if (minutes === 0) return translate(locale, "at start");
+  if (minutes % 1440 === 0) return translate(locale, "{n}d", { n: minutes / 1440 });
+  if (minutes % 60 === 0) return translate(locale, "{n}h", { n: minutes / 60 });
+  return translate(locale, "{n}m", { n: minutes });
+}
+
+export function describeReminders(list: number[], locale: Locale = "en"): string {
+  return list.length ? list.map((m) => formatReminder(m, locale)).join(locale === "ar" ? "، " : ", ") : translate(locale, "No reminder");
+}
+
+const SCRIPT: Record<Locale, RegExp> = { en: /^[\p{Script=Latin}\p{N}\s:'-]+$/u, ar: /\p{Script=Arabic}/u, he: /\p{Script=Hebrew}/u };
+
+/** Keywords written in the user's language (for display; matching still uses all of them). */
+export function keywordsFor(locale: Locale, keywords: string[]): string[] {
+  const own = keywords.filter((k) => SCRIPT[locale].test(k));
+  return own.length ? own : keywords;
 }

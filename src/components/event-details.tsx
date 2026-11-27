@@ -9,11 +9,12 @@ import { CATEGORY_META } from "./pickers";
 import { api, ApiError } from "@/lib/client/api";
 import { useInvalidateAll, useTasks } from "@/lib/client/hooks";
 import { fmtDayLong, fmtDuration, fmtTimeRange } from "@/lib/client/format";
+import { intlLocale } from "@/lib/i18n";
 import type { CalendarEvent } from "@/lib/types";
 
 export function EventDetails() {
   const { activeEvent, closeEvent, openComposer, askAssistant } = useAppUI();
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const tasks = useTasks();
@@ -42,15 +43,15 @@ export function EventDetails() {
       await invalidate();
       closeEvent();
       toast({
-        message: `Deleted “${event.title}”`,
+        message: t("Deleted “{title}”", { title: event.title }),
         action: {
-          label: "Undo",
+          label: t("Undo"),
           onClick: async () => {
             try {
               await api("/api/events/restore", { method: "POST", body: { snapshot: res.deleted } });
               await invalidate();
             } catch (e) {
-              toast({ message: e instanceof Error ? e.message : "Couldn't restore", tone: "error" });
+              toast({ message: e instanceof Error ? t(e.message) : t("Couldn't restore"), tone: "error" });
             }
           },
         },
@@ -58,9 +59,9 @@ export function EventDetails() {
     } catch (err) {
       if (err instanceof ApiError && err.code === "version_conflict") {
         setEvent(err.body.current as CalendarEvent);
-        toast({ message: "This event changed elsewhere. Review it and try again.", tone: "error" });
+        toast({ message: t("This event changed elsewhere. Review it and try again."), tone: "error" });
         await invalidate();
-      } else toast({ message: err instanceof Error ? err.message : "Couldn't delete", tone: "error" });
+      } else toast({ message: err instanceof Error ? t(err.message) : t("Couldn't delete"), tone: "error" });
       setMode("view");
     } finally {
       setBusy(false);
@@ -74,23 +75,23 @@ export function EventDetails() {
       setEvent(res.event);
       await invalidate();
     } catch (err) {
-      toast({ message: err instanceof Error ? err.message : "Couldn't update", tone: "error" });
+      toast({ message: err instanceof Error ? t(err.message) : t("Couldn't update"), tone: "error" });
     }
   }
 
   return (
-    <Sheet open={!!activeEvent} onClose={closeEvent} title={mode === "edit" ? "Edit event" : event.title}>
+    <Sheet open={!!activeEvent} onClose={closeEvent} title={mode === "edit" ? t("Edit event") : event.title}>
       {mode === "edit" ? (
         <EventForm existing={event} onDone={closeEvent} />
       ) : (
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-2">
             <span data-cat={event.category} className="inline-flex items-center gap-1.5 rounded-full bg-[var(--c-soft)] px-2.5 py-1 text-[12.5px] font-medium text-[var(--c-ink)]">
-              <meta.icon className="size-3.5" /> {meta.label}
+              <meta.icon className="size-3.5" /> {t(meta.label)}
             </span>
             <Badge>
               {event.flexibility === "fixed" ? <Lock className="size-3" /> : <Unlock className="size-3" />}
-              {event.flexibility === "fixed" ? "Fixed" : "Flexible"}
+              {event.flexibility === "fixed" ? t("Fixed") : t("Flexible")}
             </Badge>
           </div>
           <ul className="space-y-3 text-[14px]">
@@ -99,8 +100,8 @@ export function EventDetails() {
               <div>
                 <p className="font-medium">{fmtDayLong(event.startAt, prefs)}</p>
                 <p className="tabular text-ink-2">
-                  {fmtTimeRange(event.startAt, event.endAt, prefs)} · {fmtDuration(minutes)}
-                  {event.timezone !== prefs.timezone ? <span className="text-ink-3"> · created in {event.timezone}</span> : null}
+                  {fmtTimeRange(event.startAt, event.endAt, prefs)} · {fmtDuration(minutes, prefs.locale)}
+                  {event.timezone !== prefs.timezone ? <span className="text-ink-3">{" "}{t("· created in")}{" "}{event.timezone}</span> : null}
                 </p>
               </div>
             </li>
@@ -112,7 +113,7 @@ export function EventDetails() {
             ) : null}
             <li className="flex items-start gap-3">
               <Bell className="mt-0.5 size-4 text-ink-3" />
-              <span className={event.reminders.length ? "" : "text-ink-3"}>{describeReminders(event.reminders)}</span>
+              <span className={event.reminders.length ? "" : "text-ink-3"}>{describeReminders(event.reminders, prefs.locale)}</span>
             </li>
             {event.description ? (
               <li className="flex items-start gap-3">
@@ -129,15 +130,17 @@ export function EventDetails() {
               event.completedAt ? "border-[var(--cat-health)]/40 bg-[var(--cat-health-soft)]" : "border-line hover:border-primary/40",
             )}
           >
-            <CheckCircle checked={!!event.completedAt} onChange={(v) => void toggleDone(v)} label={event.completedAt ? "Mark as not done" : "Mark as done"} category={event.category} />
+            <CheckCircle checked={!!event.completedAt} onChange={(v) => void toggleDone(v)} label={event.completedAt ? t("Mark as not done") : t("Mark as done")} category={event.category} />
             <div className="min-w-0 text-[13.5px]">
-              <p className="font-medium">{event.completedAt ? "Done" : "Mark as done"}</p>
+              <p className="font-medium">{event.completedAt ? t("Done") : t("Mark as done")}</p>
               <p className="text-ink-2">
                 {event.taskId
-                  ? `Work session${task ? ` for “${task.title}”` : ""} — completing it doesn't complete the task${task?.dueDate ? ` (due ${task.dueDate})` : ""}.`
+                  ? task
+                    ? t("Work session for “{title}” — completing it doesn't complete the task.", { title: task.title })
+                    : t("Work session — completing it doesn't complete the task.")
                   : event.completedAt
-                    ? "Tap to mark it as not done."
-                    : "If it's not done by tomorrow, Tempo will ask whether to find a new time."}
+                    ? t("Tap to mark it as not done.")
+                    : t("If it's not done by tomorrow, Tempo will ask whether to find a new time.")}
               </p>
             </div>
           </button>
@@ -145,47 +148,47 @@ export function EventDetails() {
           {mode === "confirm-delete" ? (
             <div role="alert" className="animate-rise rounded-2xl border border-danger/30 bg-danger-soft p-3.5">
               <p className="text-[13.5px]">
-                Delete <b>{event.title}</b>? You can undo right after.
+                {t("Delete “{title}”? You can undo right after.", { title: event.title })}
               </p>
               <div className="mt-3 flex gap-2">
                 <Button variant="danger" size="sm" loading={busy} onClick={remove}>
-                  Delete event
+                  {t("Delete event")}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setMode("view")}>
-                  Keep it
+                  {t("Keep it")}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
               <Button variant="primary" size="sm" onClick={() => setMode("edit")}>
-                <Pencil className="size-3.5" /> Edit
+                <Pencil className="size-3.5" />{" "}{t("Edit")}
               </Button>
               <Button
                 size="sm"
                 onClick={() => {
                   closeEvent();
-                  askAssistant(`Find a better time for "${event.title}" (${fmtDayLong(event.startAt, prefs)}, ${fmtTimeRange(event.startAt, event.endAt, prefs)})`);
+                  askAssistant(t("Find a better time for “{title}” ({when})", { title: event.title, when: `${fmtDayLong(event.startAt, prefs)}, ${fmtTimeRange(event.startAt, event.endAt, prefs)}` }));
                 }}
               >
-                <Sparkles className="size-3.5 text-primary" /> Reschedule with AI
+                <Sparkles className="size-3.5 text-primary" />{" "}{t("Reschedule with AI")}
               </Button>
               <Button
                 size="sm"
                 onClick={() => {
                   closeEvent();
-                  openComposer({ kind: "note", eventId: event.id, start: event.startAt, title: `Notes: ${event.title}` });
+                  openComposer({ kind: "note", eventId: event.id, start: event.startAt, title: t("Notes: {title}", { title: event.title }) });
                 }}
               >
-                <StickyNote className="size-3.5" /> Add note
+                <StickyNote className="size-3.5" />{" "}{t("Add note")}
               </Button>
               <Button size="sm" variant="ghost" className="ms-auto text-danger hover:text-danger" onClick={() => setMode("confirm-delete")}>
-                <Trash2 className="size-3.5" /> Delete
+                <Trash2 className="size-3.5" />{" "}{t("Delete")}
               </Button>
             </div>
           )}
           <p className="flex items-center gap-1.5 text-[12px] text-ink-3">
-            <Clock className="size-3" /> Updated {new Date(event.updatedAt).toLocaleString()}
+            <Clock className="size-3" /> {t("Updated {when}", { when: new Date(event.updatedAt).toLocaleString(intlLocale(prefs.locale)) })}
           </p>
         </div>
       )}

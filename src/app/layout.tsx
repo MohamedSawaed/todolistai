@@ -11,7 +11,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Tempo — your time, intelligently organized",
+  title: "Tempo",
   description: "A personal planner that turns your plans into a schedule.",
   applicationName: "Tempo",
   // iPhone "Add to Home Screen": open full-screen with the app name

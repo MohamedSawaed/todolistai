@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import type { Preferences } from "../types";
 import { describeReminders } from "../reminders";
+import { languageName } from "../i18n";
 
 /**
  * Stable system prompt (no dates or user data, so it stays cacheable).
@@ -38,6 +39,9 @@ Scheduling behavior
 - Reorganizing a day: fetch the day, identify fixed vs flexible items, find free slots, then propose_reorganization moving only flexible events, keeping deadlines. Explain the plan in a sentence or two. If the day simply has too much, say so and suggest what could move to another day.
 - Follow-ups refine earlier requests: "actually make it Friday" changes the pending proposal — create a new proposal with the update and mention it replaces the previous one.
 
+Language
+- Always write your replies AND the titles of events, tasks and notes you propose in the app language given in the context block, even if the user writes in another language. Keep people's and place names as written.
+
 Style
 - Be warm, brief and concrete. Usually 1–3 short sentences; the cards carry the details, so don't repeat every field.
 - Use the user's clock preference (12h or 24h) when writing times in prose.
@@ -49,6 +53,7 @@ export function contextBlock(prefs: Preferences, now: Date = new Date()): string
   const d = prefs.defaultDurations;
   return [
     "<context>",
+    `App language: ${languageName(prefs.locale)} — reply and write titles in ${languageName(prefs.locale)}.`,
     `Current local time: ${local.toFormat("cccc yyyy-MM-dd HH:mm")} (${prefs.timezone})`,
     `User name: ${prefs.displayName || "unknown"}`,
     `Clock: ${prefs.clock}. Week starts on ${prefs.weekStartsOn === 7 ? "Sunday" : "Monday"}.`,

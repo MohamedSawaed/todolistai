@@ -1,8 +1,9 @@
 "use client";
+import { useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { ChevronDown, RefreshCw, Sparkles } from "lucide-react";
 import { usePrefs } from "./providers";
-import { Button, Skeleton } from "./ui";
+import { Button, Skeleton, cx } from "./ui";
 import { api } from "@/lib/client/api";
 import { todayLocal } from "@/lib/client/format";
 
@@ -11,39 +12,48 @@ interface Briefing {
   generatedAt: string;
 }
 
-const key = (date: string) => `tempo.briefing.${date}`;
+// v2 = the short format (headline + up to 3 bullets)
+const key = (date: string, locale: string) => `tempo.briefing.v2.${date}.${locale}`;
+const COLLAPSED = "tempo.briefing.collapsed";
 
-function readCache(date: string): Briefing | null {
+function read<T>(k: string): T | null {
   try {
-    const raw = localStorage.getItem(key(date));
-    return raw ? (JSON.parse(raw) as Briefing) : null;
+    const raw = localStorage.getItem(k);
+    return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
   }
 }
+function write(k: string, v: unknown) {
+  try {
+    localStorage.setItem(k, JSON.stringify(v));
+  } catch {
+    /* storage unavailable */
+  }
+}
 
-async function fetchBriefing(date: string, force: boolean): Promise<Briefing> {
+const listeners = new Set<() => void>();
+const subscribe = (cb: () => void) => (listeners.add(cb), () => listeners.delete(cb));
+
+async function fetchBriefing(date: string, locale: string, force: boolean): Promise<Briefing> {
   if (!force) {
-    const cached = readCache(date);
+    const cached = read<Briefing>(key(date, locale));
     if (cached) return cached;
   }
   const res = await api<Briefing>("/api/briefing", { method: "POST" });
-  try {
-    localStorage.setItem(key(date), JSON.stringify(res));
-  } catch {
-    /* storage unavailable: it'll be regenerated next time */
-  }
+  write(key(date, locale), res);
   return res;
 }
 
-/** AI-written summary of the day, generated once per day (cached on this device). */
+/** Short AI summary of the day: a one-line headline plus up to three bullets, collapsible. */
 export function DailyBriefing() {
-  const { prefs, status } = usePrefs();
+  const { prefs, status, t } = usePrefs();
   const qc = useQueryClient();
   const today = todayLocal(prefs.timezone);
+  const collapsed = useSyncExternalStore(subscribe, () => read<boolean>(COLLAPSED) === true, () => false);
   const q = useQuery({
-    queryKey: ["briefing", today],
-    queryFn: () => fetchBriefing(today, false),
+    queryKey: ["briefing", today, prefs.locale],
+    queryFn: () => fetchBriefing(today, prefs.locale, false),
     enabled: status.ai,
     staleTime: Infinity,
     retry: 0,
@@ -51,47 +61,62 @@ export function DailyBriefing() {
   if (!status.ai) return null;
 
   const refresh = () =>
-    qc.fetchQuery({ queryKey: ["briefing", today], queryFn: () => fetchBriefing(today, true), staleTime: 0 }).catch(() => undefined);
+    qc.fetchQuery({ queryKey: ["briefing", today, prefs.locale], queryFn: () => fetchBriefing(today, prefs.locale, true), staleTime: 0 }).catch(() => undefined);
+  const toggle = () => {
+    write(COLLAPSED, !collapsed);
+    listeners.forEach((l) => l());
+  };
 
   const lines = (q.data?.text ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const headline = lines.find((l) => !/^[•-]/.test(l)) ?? lines[0] ?? "";
+  const bullets = lines.filter((l) => /^[•-]/.test(l)).map((l) => l.replace(/^[•-]\s*/, "")).slice(0, 3);
+  const loading = q.isPending || (q.isFetching && !q.data);
 
   return (
-    <section aria-label="Daily briefing" className="mt-6 rounded-3xl border border-primary/20 bg-gradient-to-b from-primary-soft/60 to-surface p-4 sm:p-5">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="grid size-7 place-items-center rounded-lg bg-primary text-white">
-          <Sparkles className="size-3.5" />
-        </span>
-        <h2 className="flex-1 text-[14.5px] font-semibold">Your daily briefing</h2>
-        <Button variant="ghost" size="icon-sm" aria-label="Refresh briefing" onClick={refresh} disabled={q.isFetching}>
-          <RefreshCw className={q.isFetching ? "size-3.5 animate-spin" : "size-3.5"} />
-        </Button>
-      </div>
-      {q.isPending || (q.isFetching && !q.data) ? (
-        <div className="space-y-2 py-1" aria-label="Writing your briefing">
-          <Skeleton className="h-3.5 w-11/12" />
-          <Skeleton className="h-3.5 w-9/12" />
-          <Skeleton className="h-3.5 w-10/12" />
-        </div>
-      ) : q.isError ? (
-        <p className="text-[13.5px] text-ink-2">
-          Couldn&apos;t write today&apos;s briefing. <button className="font-medium text-primary underline" onClick={refresh}>Try again</button>
-        </p>
-      ) : (
-        <div className="space-y-1.5 text-[14px] leading-relaxed">
-          {lines.map((l, i) =>
-            l.startsWith("•") || l.startsWith("-") ? (
-              <p key={i} className="flex gap-2 text-ink">
-                <span className="text-primary" aria-hidden>•</span>
-                <span>{l.replace(/^[•-]\s*/, "")}</span>
-              </p>
-            ) : (
-              <p key={i} className={i === 0 ? "font-medium text-ink" : "text-ink-2"}>
-                {l}
-              </p>
-            ),
+    <section aria-label={t("Daily briefing")} className="mt-5 rounded-2xl border border-primary/15 bg-primary-soft/40 px-3.5 py-2.5">
+      <div className="flex items-center gap-2.5">
+        <Sparkles className="size-4 shrink-0 text-primary" aria-hidden />
+        <div className="min-w-0 flex-1">
+          {loading ? (
+            <Skeleton className="h-4 w-3/4" />
+          ) : q.isError ? (
+            <p className="text-[13px] text-ink-2">
+              {t("Couldn't write today's briefing.")}{" "}
+              <button className="font-medium text-primary underline" onClick={refresh}>
+                {t("Try again")}
+              </button>
+            </p>
+          ) : (
+            <p className={cx("text-[14px] leading-snug font-semibold", collapsed && "truncate")}>{headline}</p>
           )}
         </div>
-      )}
+        {!loading && !q.isError ? (
+          <>
+            {!collapsed ? (
+              <Button variant="ghost" size="icon-sm" aria-label={t("Refresh briefing")} onClick={refresh} disabled={q.isFetching}>
+                <RefreshCw className={q.isFetching ? "size-3.5 animate-spin" : "size-3.5"} />
+              </Button>
+            ) : null}
+            {bullets.length ? (
+              <Button variant="ghost" size="icon-sm" aria-label={collapsed ? t("Show briefing") : t("Hide details")} aria-expanded={!collapsed} onClick={toggle}>
+                <ChevronDown className={cx("size-4 transition-transform", !collapsed && "rotate-180")} />
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+      {!collapsed && !loading && bullets.length ? (
+        <ul className="mt-1.5 space-y-1 ps-[26px] text-[13px] leading-snug text-ink-2">
+          {bullets.map((b, i) => (
+            <li key={i} className="flex gap-1.5">
+              <span className="text-primary" aria-hidden>
+                •
+              </span>
+              <span>{b}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

@@ -7,23 +7,23 @@ import { useAppUI, usePrefs, useToast, type ComposerKind, type ComposerOptions }
 import { Button, Field, Input, Segmented, Sheet, Textarea, cx } from "./ui";
 import { CategoryPicker, PriorityPicker } from "./pickers";
 import { ReminderPicker } from "./reminder-picker";
-import { remindersFor } from "@/lib/reminders";
+import { formatReminder, remindersFor } from "@/lib/reminders";
+import { translate, type Locale } from "@/lib/i18n";
 import { api, ApiError } from "@/lib/client/api";
 import { useInvalidateAll, type ConflictResponse } from "@/lib/client/hooks";
 import { fmtSlot, fmtTimeRange } from "@/lib/client/format";
 import type { CalendarEvent, Category, Priority } from "@/lib/types";
 
-export const REMINDER_OPTIONS: { value: string; label: string }[] = [
-  { value: "", label: "No reminder" },
-  { value: "0", label: "At time of event" },
-  { value: "5", label: "5 minutes before" },
-  { value: "15", label: "15 minutes before" },
-  { value: "30", label: "30 minutes before" },
-  { value: "60", label: "1 hour before" },
-  { value: "1440", label: "1 day before" },
-];
+/** Choices for a single default reminder, in the user's language. */
+export function reminderOptions(locale: Locale): { value: string; label: string }[] {
+  return [
+    { value: "", label: translate(locale, "No reminder") },
+    ...[0, 5, 10, 15, 30, 60, 1440].map((m) => ({ value: String(m), label: formatReminder(m, locale) })),
+  ];
+}
 
 export function Composer() {
+  const { t } = usePrefs();
   const { composer, closeComposer } = useAppUI();
   const [kind, setKind] = useState<ComposerKind>("event");
   const [opened, setOpened] = useState(composer);
@@ -33,18 +33,18 @@ export function Composer() {
   }
 
   return (
-    <Sheet open={!!composer} onClose={closeComposer} title={kind === "event" ? "New event" : kind === "task" ? "New task" : "New note"}>
+    <Sheet open={!!composer} onClose={closeComposer} title={kind === "event" ? t("New event") : kind === "task" ? t("New task") : t("New note")}>
       {composer ? (
         <div className="space-y-5 pt-1" key={JSON.stringify(composer)}>
           <Segmented
-            label="Type"
+            label={t("Type")}
             className="w-full"
             value={kind}
             onChange={setKind}
             options={[
-              { value: "event", label: "Event", icon: <CalendarClock className="size-3.5" /> },
-              { value: "task", label: "Task", icon: <CheckSquare className="size-3.5" /> },
-              { value: "note", label: "Note", icon: <StickyNote className="size-3.5" /> },
+              { value: "event", label: t("Event"), icon: <CalendarClock className="size-3.5" /> },
+              { value: "task", label: t("Task"), icon: <CheckSquare className="size-3.5" /> },
+              { value: "note", label: t("Note"), icon: <StickyNote className="size-3.5" /> },
             ]}
           />
           {kind === "event" ? <EventForm opts={composer} onDone={closeComposer} /> : kind === "task" ? <TaskForm opts={composer} onDone={closeComposer} /> : <NoteForm opts={composer} onDone={closeComposer} />}
@@ -71,7 +71,7 @@ function useDebounced<T>(value: T, ms: number): T {
 
 // ---------------------------------------------------------------- event
 export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; onDone: () => void; existing?: CalendarEvent }) {
-  const { prefs, status } = usePrefs();
+  const { prefs, status, t } = usePrefs();
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const zone = prefs.timezone;
@@ -112,13 +112,13 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
     manualReminders !== null
       ? null
       : ai
-        ? `AI: ${ai.reason}`
+        ? `${t("AI")}: ${ai.reason}`
         : aiSuggestion.isFetching || (status.ai && !existing && title.trim().length >= 3 && debouncedTitle !== title.trim())
-          ? "Choosing the best reminders…"
+          ? t("Choosing the best reminders…")
           : auto.rule
-            ? `Set by your “${auto.rule.label}” reminder rule`
+            ? t("Set by your “{rule}” reminder rule", { rule: t(auto.rule.label) })
             : title.trim()
-              ? "Your default reminder"
+              ? t("Your default reminder")
               : null;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [conflict, setConflict] = useState<ConflictResponse | null>(null);
@@ -144,8 +144,8 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
 
   async function save(override?: { startAt: string; endAt: string; allowOverlap?: boolean }) {
     const local: Record<string, string> = {};
-    if (!title.trim()) local.title = "Give it a title";
-    if (!date) local.date = "Pick a date";
+    if (!title.trim()) local.title = t("Give it a title");
+    if (!date) local.date = t("Pick a date");
     if (Object.keys(local).length) return setErrors(local);
     setErrors({});
     setSaving(true);
@@ -166,12 +166,12 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
       if (existing) await api(`/api/events/${existing.id}`, { method: "PATCH", body });
       else await api(`/api/events`, { method: "POST", body });
       await invalidate();
-      toast({ message: existing ? "Event updated" : `“${body.title}” added to your calendar` });
+      toast({ message: existing ? t("Event updated") : t("“{title}” added to your calendar", { title: body.title }) });
       onDone();
     } catch (err) {
       if (err instanceof ApiError && err.code === "conflict") setConflict(err.body as unknown as ConflictResponse);
       else if (err instanceof ApiError && err.code === "validation") setErrors(err.fields);
-      else toast({ message: err instanceof Error ? err.message : "Couldn't save", tone: "error" });
+      else toast({ message: err instanceof Error ? t(err.message) : t("Couldn't save"), tone: "error" });
     } finally {
       setSaving(false);
     }
@@ -195,14 +195,14 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
         void save();
       }}
     >
-      <Field label="Title" error={errors.title} htmlFor="ev-title">
-        <Input id="ev-title" data-autofocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Dentist appointment" invalid={!!errors.title} maxLength={200} />
+      <Field label={t("Title")} error={errors.title} htmlFor="ev-title">
+        <Input id="ev-title" data-autofocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("e.g. Dentist appointment")} invalid={!!errors.title} maxLength={200} />
       </Field>
       <div className="grid grid-cols-[1.3fr_1fr_1fr] gap-2.5">
-        <Field label="Date" error={errors.date} htmlFor="ev-date">
+        <Field label={t("Date")} error={errors.date} htmlFor="ev-date">
           <Input id="ev-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} invalid={!!errors.date} />
         </Field>
-        <Field label="Start" htmlFor="ev-start" error={errors.startAt}>
+        <Field label={t("Start")} htmlFor="ev-start" error={errors.startAt}>
           <Input
             id="ev-start"
             type="time"
@@ -214,7 +214,7 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
             }}
           />
         </Field>
-        <Field label="End" htmlFor="ev-end" error={errors.endAt}>
+        <Field label={t("End")} htmlFor="ev-end" error={errors.endAt}>
           <Input id="ev-end" type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
         </Field>
       </div>
@@ -242,7 +242,7 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
           <p className="flex items-start gap-2 text-[13.5px] text-ink">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
             <span>
-              This overlaps{" "}
+              {t("This overlaps")}{" "}
               {conflict.conflicts.map((c, i) => (
                 <span key={c.id}>
                   {i ? ", " : ""}
@@ -263,47 +263,47 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
           ) : null}
           <div className="flex gap-2">
             <Button type="button" size="sm" variant="ghost" onClick={() => void save({ ...computeTimes(), allowOverlap: true })}>
-              Keep both (overlap)
+              {t("Keep both (overlap)")}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setConflict(null)}>
-              Choose another time
+              {t("Choose another time")}
             </Button>
           </div>
         </div>
       ) : null}
 
-      <Field label="Category">
+      <Field label={t("Category")}>
         <CategoryPicker value={category} onChange={setCategory} />
       </Field>
-      <Field label="Reminders" htmlFor="ev-reminder">
+      <Field label={t("Reminders")} htmlFor="ev-reminder">
         <ReminderPicker id="ev-reminder" value={reminders} onChange={setManualReminders} hint={reminderHint} />
       </Field>
-      <Field label="Scheduling" hint={flexibility === "fixed" ? "A commitment. The assistant won't move it." : "The assistant may suggest moving it."}>
+      <Field label={t("Scheduling")} hint={flexibility === "fixed" ? t("A commitment. The assistant won't move it.") : t("The assistant may suggest moving it.")}>
         <Segmented
           className="w-full sm:w-72"
           value={flexibility}
           onChange={setFlexibility}
           options={[
-            { value: "fixed", label: "Fixed" },
-            { value: "flexible", label: "Flexible" },
+            { value: "fixed", label: t("Fixed") },
+            { value: "flexible", label: t("Flexible") },
           ]}
         />
       </Field>
-      <Field label="Location (optional)" htmlFor="ev-loc">
+      <Field label={t("Location (optional)")} htmlFor="ev-loc">
         <div className="relative">
           <MapPin className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
           <Input id="ev-loc" className="ps-9" value={location} onChange={(e) => setLocation(e.target.value)} maxLength={300} />
         </div>
       </Field>
-      <Field label="Description (optional)" htmlFor="ev-desc">
+      <Field label={t("Description (optional)")} htmlFor="ev-desc">
         <Textarea id="ev-desc" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} rows={2} />
       </Field>
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" onClick={onDone}>
-          Cancel
+          {t("Cancel")}
         </Button>
         <Button type="submit" variant="primary" loading={saving}>
-          {existing ? "Save changes" : "Add event"}
+          {existing ? t("Save changes") : t("Add event")}
         </Button>
       </div>
     </form>
@@ -312,6 +312,7 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
 
 // ---------------------------------------------------------------- task
 function TaskForm({ opts, onDone }: { opts: ComposerOptions; onDone: () => void }) {
+  const { t } = usePrefs();
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const [title, setTitle] = useState(opts.title ?? "");
@@ -326,8 +327,8 @@ function TaskForm({ opts, onDone }: { opts: ComposerOptions; onDone: () => void 
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (!title.trim()) return setErrors({ title: "Give it a title" });
-    if (dueTime && !dueDate) return setErrors({ dueDate: "Add a date for the due time" });
+    if (!title.trim()) return setErrors({ title: t("Give it a title") });
+    if (dueTime && !dueDate) return setErrors({ dueDate: t("Add a date for the due time") });
     setErrors({});
     setSaving(true);
     const subs = [...subtasks, ...(newSub.trim() ? [newSub.trim()] : [])];
@@ -345,11 +346,11 @@ function TaskForm({ opts, onDone }: { opts: ComposerOptions; onDone: () => void 
         },
       });
       await invalidate();
-      toast({ message: `Task “${title.trim()}” added` });
+      toast({ message: t("Task “{title}” added", { title: title.trim() }) });
       onDone();
     } catch (err) {
       if (err instanceof ApiError && err.code === "validation") setErrors(err.fields);
-      else toast({ message: err instanceof Error ? err.message : "Couldn't save", tone: "error" });
+      else toast({ message: err instanceof Error ? t(err.message) : t("Couldn't save"), tone: "error" });
     } finally {
       setSaving(false);
     }
@@ -363,29 +364,29 @@ function TaskForm({ opts, onDone }: { opts: ComposerOptions; onDone: () => void 
         void save();
       }}
     >
-      <Field label="Task" error={errors.title} htmlFor="t-title">
-        <Input id="t-title" data-autofocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Prepare presentation" invalid={!!errors.title} maxLength={200} />
+      <Field label={t("Task")} error={errors.title} htmlFor="t-title">
+        <Input id="t-title" data-autofocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("e.g. Prepare presentation")} invalid={!!errors.title} maxLength={200} />
       </Field>
       <div className="grid grid-cols-2 gap-2.5">
-        <Field label="Due date (optional)" error={errors.dueDate} htmlFor="t-date">
+        <Field label={t("Due date (optional)")} error={errors.dueDate} htmlFor="t-date">
           <Input id="t-date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} invalid={!!errors.dueDate} />
         </Field>
-        <Field label="Due time (optional)" htmlFor="t-time">
+        <Field label={t("Due time (optional)")} htmlFor="t-time">
           <Input id="t-time" type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
         </Field>
       </div>
-      <Field label="Priority">
+      <Field label={t("Priority")}>
         <PriorityPicker value={priority} onChange={setPriority} />
       </Field>
-      <Field label="Category">
+      <Field label={t("Category")}>
         <CategoryPicker value={category} onChange={setCategory} />
       </Field>
-      <Field label="Subtasks">
+      <Field label={t("Subtasks")}>
         <div className="space-y-1.5">
           {subtasks.map((s, i) => (
             <div key={i} className="flex items-center gap-2 rounded-xl bg-surface-2 py-1.5 ps-3 pe-1.5 text-[14px]">
               <span className="flex-1 truncate">{s}</span>
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${s}`} onClick={() => setSubtasks(subtasks.filter((_, j) => j !== i))}>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={t("Remove {name}", { name: s })} onClick={() => setSubtasks(subtasks.filter((_, j) => j !== i))}>
                 <Trash2 className="size-3.5" />
               </Button>
             </div>
@@ -394,8 +395,8 @@ function TaskForm({ opts, onDone }: { opts: ComposerOptions; onDone: () => void 
             <Input
               value={newSub}
               onChange={(e) => setNewSub(e.target.value)}
-              placeholder="Add a step"
-              aria-label="New subtask"
+              placeholder={t("Add a step")}
+              aria-label={t("New subtask")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -409,7 +410,7 @@ function TaskForm({ opts, onDone }: { opts: ComposerOptions; onDone: () => void 
             <Button
               type="button"
               size="icon"
-              aria-label="Add subtask"
+              aria-label={t("Add subtask")}
               onClick={() => {
                 if (newSub.trim()) {
                   setSubtasks([...subtasks, newSub.trim()]);
@@ -422,15 +423,15 @@ function TaskForm({ opts, onDone }: { opts: ComposerOptions; onDone: () => void 
           </div>
         </div>
       </Field>
-      <Field label="Notes (optional)" htmlFor="t-desc">
+      <Field label={t("Notes (optional)")} htmlFor="t-desc">
         <Textarea id="t-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} />
       </Field>
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" onClick={onDone}>
-          Cancel
+          {t("Cancel")}
         </Button>
         <Button type="submit" variant="primary" loading={saving}>
-          Add task
+          {t("Add task")}
         </Button>
       </div>
     </form>
@@ -441,7 +442,7 @@ function TaskForm({ opts, onDone }: { opts: ComposerOptions; onDone: () => void 
 function NoteForm({ opts, onDone }: { opts: ComposerOptions & { eventId?: string }; onDone: () => void }) {
   const toast = useToast();
   const invalidate = useInvalidateAll();
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const [title, setTitle] = useState(opts.title ?? "");
   const [content, setContent] = useState("");
   const [date, setDate] = useState(opts.date ?? (opts.start ? DateTime.fromISO(opts.start).setZone(prefs.timezone).toISODate()! : ""));
@@ -449,16 +450,16 @@ function NoteForm({ opts, onDone }: { opts: ComposerOptions & { eventId?: string
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (!title.trim()) return setErrors({ title: "Give it a title" });
+    if (!title.trim()) return setErrors({ title: t("Give it a title") });
     setSaving(true);
     try {
       await api("/api/notes", { method: "POST", body: { title: title.trim(), content, date: date || null, eventId: opts.eventId ?? null } });
       await invalidate();
-      toast({ message: "Note saved" });
+      toast({ message: t("Note saved") });
       onDone();
     } catch (err) {
       if (err instanceof ApiError && err.code === "validation") setErrors(err.fields);
-      else toast({ message: err instanceof Error ? err.message : "Couldn't save", tone: "error" });
+      else toast({ message: err instanceof Error ? t(err.message) : t("Couldn't save"), tone: "error" });
     } finally {
       setSaving(false);
     }
@@ -472,21 +473,21 @@ function NoteForm({ opts, onDone }: { opts: ComposerOptions & { eventId?: string
         void save();
       }}
     >
-      <Field label="Title" error={errors.title} htmlFor="n-title">
-        <Input id="n-title" data-autofocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. New business idea" invalid={!!errors.title} maxLength={200} />
+      <Field label={t("Title")} error={errors.title} htmlFor="n-title">
+        <Input id="n-title" data-autofocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("e.g. New business idea")} invalid={!!errors.title} maxLength={200} />
       </Field>
-      <Field label="Note" htmlFor="n-content" error={errors.content}>
-        <Textarea id="n-content" rows={5} value={content} onChange={(e) => setContent(e.target.value)} maxLength={20000} placeholder="Write anything…" />
+      <Field label={t("Note")} htmlFor="n-content" error={errors.content}>
+        <Textarea id="n-content" rows={5} value={content} onChange={(e) => setContent(e.target.value)} maxLength={20000} placeholder={t("Write anything…")} />
       </Field>
-      <Field label="Attach to a date (optional)" htmlFor="n-date" hint="Notes appear on that day but don't block time.">
+      <Field label={t("Attach to a date (optional)")} htmlFor="n-date" hint={t("Notes appear on that day but don't block time.")}>
         <Input id="n-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </Field>
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" onClick={onDone}>
-          Cancel
+          {t("Cancel")}
         </Button>
         <Button type="submit" variant="primary" loading={saving}>
-          Save note
+          {t("Save note")}
         </Button>
       </div>
     </form>

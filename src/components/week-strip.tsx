@@ -11,7 +11,7 @@ export function weekStart(date: string, weekStartsOn: 1 | 7, zone: string) {
 }
 
 export function WeekStrip({ selected, onSelect, busyDates }: { selected: string; onSelect: (d: string) => void; busyDates: Set<string> }) {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const start = weekStart(selected, prefs.weekStartsOn, prefs.timezone);
   const today = DateTime.now().setZone(prefs.timezone).toISODate();
   const days = Array.from({ length: 7 }, (_, i) => DateTime.fromISO(start).plus({ days: i }).setLocale(intlLocale(prefs.locale)));
@@ -19,10 +19,10 @@ export function WeekStrip({ selected, onSelect, busyDates }: { selected: string;
 
   return (
     <div className="flex items-center gap-1">
-      <Button variant="ghost" size="icon-sm" aria-label="Previous week" onClick={() => shift(-1)} className="shrink-0">
+      <Button variant="ghost" size="icon-sm" aria-label={t("Previous week")} onClick={() => shift(-1)} className="shrink-0">
         <ChevronLeft className="size-4 rtl:rotate-180" />
       </Button>
-      <div role="listbox" aria-label="Select a day" className="grid flex-1 grid-cols-7 gap-1">
+      <div role="listbox" aria-label={t("Select a day")} className="grid flex-1 grid-cols-7 gap-1">
         {days.map((d) => {
           const iso = d.toISODate()!;
           const isSel = iso === selected;
@@ -46,7 +46,7 @@ export function WeekStrip({ selected, onSelect, busyDates }: { selected: string;
           );
         })}
       </div>
-      <Button variant="ghost" size="icon-sm" aria-label="Next week" onClick={() => shift(1)} className="shrink-0">
+      <Button variant="ghost" size="icon-sm" aria-label={t("Next week")} onClick={() => shift(1)} className="shrink-0">
         <ChevronRight className="size-4 rtl:rotate-180" />
       </Button>
     </div>

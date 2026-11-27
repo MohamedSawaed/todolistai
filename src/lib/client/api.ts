@@ -1,4 +1,5 @@
 "use client";
+import { msg } from "../i18n";
 
 export class ApiError extends Error {
   constructor(
@@ -26,7 +27,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
       signal: init.signal,
     });
   } catch {
-    throw new ApiError(0, "You appear to be offline. Nothing was saved.", { code: "network" });
+    throw new ApiError(0, msg("You appear to be offline. Nothing was saved."), { code: "network" });
   }
   const text = await res.text();
   let data: Record<string, unknown> = {};
@@ -37,7 +38,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   }
   if (!res.ok) {
     if (res.status === 401 && typeof window !== "undefined") window.location.assign(new URL("/welcome", window.location.origin));
-    throw new ApiError(res.status, (data.error as string) || `Request failed (${res.status})`, data);
+    throw new ApiError(res.status, (data.error as string) || msg("Something went wrong. Please try again."), data);
   }
   return data as T;
 }

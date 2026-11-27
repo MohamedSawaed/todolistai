@@ -4,8 +4,8 @@ import { DateTime } from "luxon";
 import { Check } from "lucide-react";
 import { usePrefs } from "../providers";
 import { cx } from "../ui";
-import { fmtTime } from "@/lib/client/format";
-import { intlLocale } from "@/lib/i18n";
+import { fmtDate, fmtTime } from "@/lib/client/format";
+import { countLabel } from "@/lib/i18n";
 import type { CalendarEvent } from "@/lib/types";
 
 export function monthGrid(anchor: string, weekStartsOn: 1 | 7) {
@@ -27,7 +27,7 @@ export function MonthView({
   onSelect: (d: string) => void;
   onOpen: (e: CalendarEvent) => void;
 }) {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const zone = prefs.timezone;
   const cells = monthGrid(anchor, prefs.weekStartsOn);
   const month = DateTime.fromISO(anchor).month;
@@ -47,7 +47,7 @@ export function MonthView({
     return map;
   }, [events, zone]);
 
-  const weekdays = cells.slice(0, 7).map((d) => DateTime.fromISO(d).setLocale(intlLocale(prefs.locale)).toFormat("ccc"));
+  const weekdays = cells.slice(0, 7).map((d) => fmtDate(DateTime.fromISO(d), prefs.locale, "weekdayShort"));
 
   return (
     <div className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-line bg-surface lg:h-full">
@@ -72,7 +72,7 @@ export function MonthView({
               onClick={() => onSelect(iso)}
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onSelect(iso))}
               aria-pressed={isSel}
-              aria-label={`${d.toFormat("cccc, LLLL d")}, ${list.length} ${list.length === 1 ? "event" : "events"}`}
+              aria-label={`${fmtDate(d, prefs.locale, "long")}, ${countLabel(t, list.length, "event")}`}
               className={cx(
                 "flex min-h-[64px] min-w-0 cursor-pointer flex-col gap-1 overflow-hidden border-e border-b border-line/70 p-1 text-start transition-colors sm:min-h-[104px] sm:p-1.5 lg:min-h-0",
                 !inMonth && "bg-surface-2/50",
@@ -109,17 +109,17 @@ export function MonthView({
                     title={`${fmtTime(e.startAt, prefs)} ${e.title}`}
                     className={cx(
                       "block min-w-0 rounded-md border-s-[3px] border-[var(--c)] bg-[var(--c-soft)] px-1.5 py-0.5 text-[11.5px] leading-[14px] hover:brightness-95",
-                      e.completedAt && "opacity-55",
+                      e.completedAt && "bg-surface-2",
                     )}
                   >
                     <span className="tabular me-1 text-[10.5px] text-[var(--c-ink)]">{fmtTime(e.startAt, prefs)}</span>
                     {e.completedAt ? <Check className="me-0.5 inline size-3 text-[var(--c-ink)]" aria-hidden /> : null}
-                    <span className={cx("font-medium break-words text-ink", e.completedAt && "line-through")} style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden" }}>
+                    <span className={cx("font-medium break-words text-ink", e.completedAt && "text-ink-2 line-through decoration-ink-3")} style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden" }}>
                       {e.title}
                     </span>
                   </span>
                 ))}
-                {list.length > 3 ? <span className="px-1 text-[11px] font-medium text-ink-2">+{list.length - 3} more</span> : null}
+                {list.length > 3 ? <span className="px-1 text-[11px] font-medium text-ink-2">{t("+{n} more", { n: list.length - 3 })}</span> : null}
               </span>
             </div>
           );

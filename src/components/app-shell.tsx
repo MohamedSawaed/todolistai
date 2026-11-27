@@ -9,14 +9,13 @@ import { Composer } from "./composer";
 import { EventDetails } from "./event-details";
 import { ChatView } from "./chat";
 import { NotificationBell, useReminders } from "./notifications";
-import type { MessageKey } from "@/lib/i18n";
-
-const NAV: { href: string; msg: MessageKey; icon: typeof Home }[] = [
-  { href: "/", msg: "nav.today", icon: Home },
-  { href: "/calendar", msg: "nav.calendar", icon: CalendarDays },
-  { href: "/tasks", msg: "nav.tasks", icon: CheckSquare },
-  { href: "/assistant", msg: "nav.assistant", icon: Sparkles },
-  { href: "/settings", msg: "nav.settings", icon: Settings },
+import { msg } from "@/lib/i18n";
+const NAV: { href: string; msg: string; icon: typeof Home }[] = [
+  { href: "/", msg: msg("Today"), icon: Home },
+  { href: "/calendar", msg: msg("Calendar"), icon: CalendarDays },
+  { href: "/tasks", msg: msg("Tasks"), icon: CheckSquare },
+  { href: "/assistant", msg: msg("Assistant"), icon: Sparkles },
+  { href: "/settings", msg: msg("Settings"), icon: Settings },
 ];
 
 export function Logo({ className }: { className?: string }) {
@@ -81,10 +80,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NotificationBell />
         </div>
         <Button variant="primary" className="mx-1 mt-6" onClick={() => ui.openComposer()}>
-          <Plus className="size-4" /> {t("action.add")}
+          <Plus className="size-4" /> {t("Add")}
           <span className="ms-auto rounded-md bg-white/20 px-1.5 text-[11px] font-medium">N</span>
         </Button>
-        <nav className="mt-6 flex flex-col gap-0.5" aria-label="Main">
+        <nav className="mt-6 flex flex-col gap-0.5" aria-label={t("Main")}>
           {NAV.map(({ href, msg, icon: Icon }) => (
             <Link
               key={href}
@@ -107,17 +106,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 text-start text-[13px] text-ink-2 transition-colors hover:border-primary/40 hover:text-ink"
             >
               <Sparkles className="size-4 text-primary" />
-              <span className="flex-1">{ui.assistantOpen ? "Hide assistant" : "Ask assistant"}</span>
+              <span className="flex-1">{ui.assistantOpen ? t("Hide assistant") : t("Ask assistant")}</span>
               <Kbd>/</Kbd>
             </button>
           ) : null}
           {status.storage === "local" ? (
             <p className="rounded-xl bg-warning-soft px-3 py-2 text-[11.5px] leading-snug text-warning">
-              <b>Local mode.</b> Data is stored on this machine only. Connect Supabase for accounts &amp; sync.
+              <b>{t("Local mode.")}</b> {t("Data is stored on this machine only. Connect Supabase for accounts & sync.")}
             </p>
           ) : null}
           <button onClick={() => setShortcutsOpen(true)} className="flex items-center gap-2 px-2 text-[12px] text-ink-3 hover:text-ink-2">
-            <Keyboard className="size-3.5" /> Keyboard shortcuts <Kbd>?</Kbd>
+            <Keyboard className="size-3.5" /> {t("Keyboard shortcuts")} <Kbd>?</Kbd>
           </button>
         </div>
       </aside>
@@ -129,18 +128,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         <>
           <div className="fixed inset-0 z-40 animate-fade-in bg-[rgb(20_20_32/0.25)] xl:hidden" onClick={() => ui.setAssistantOpen(false)} aria-hidden />
           <aside
-            aria-label="Assistant"
+            aria-label={t("Assistant")}
             className="fixed inset-y-0 end-0 z-40 flex w-full max-w-[420px] animate-slide-in flex-col border-s border-line bg-surface shadow-float xl:sticky xl:top-0 xl:h-dvh xl:w-[400px] xl:shrink-0 xl:shadow-none"
           >
             <div className="flex items-center justify-between border-b border-line px-4 py-3">
               <span className="flex items-center gap-2 text-[14px] font-semibold">
-                <Sparkles className="size-4 text-primary" /> Assistant
+                <Sparkles className="size-4 text-primary" /> {t("Assistant")}
               </span>
               <div className="flex items-center gap-1">
                 <Link href="/assistant" className="rounded-lg px-2 py-1 text-[12px] text-ink-2 hover:bg-surface-2" onClick={() => ui.setAssistantOpen(false)}>
-                  Full view
+                  {t("Full view")}
                 </Link>
-                <Button variant="ghost" size="icon-sm" aria-label="Close assistant" onClick={() => ui.setAssistantOpen(false)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("Close assistant")} onClick={() => ui.setAssistantOpen(false)}>
                   <X className="size-4" />
                 </Button>
               </div>
@@ -152,7 +151,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* mobile bottom navigation */}
       <nav
-        aria-label="Main"
+        aria-label={t("Main")}
         className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"
       >
         <div className="mx-auto grid h-[64px] max-w-md grid-cols-5 items-center px-2">
@@ -161,7 +160,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
           <div className="grid place-items-center">
             <button
-              aria-label="Add"
+              aria-label={t("Add")}
               onClick={() => ui.openComposer()}
               className="grid size-12 place-items-center rounded-2xl bg-primary text-white shadow-[0_6px_18px_rgb(118_101_216/0.4)] transition-transform active:scale-95"
             >
@@ -176,20 +175,20 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <Composer />
       <EventDetails />
-      <Sheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} title="Keyboard shortcuts">
+      <Sheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} title={t("Keyboard shortcuts")}>
         <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-2.5 text-[13.5px]">
           {[
-            ["New event, task or note", "N"],
-            ["Ask the assistant", "/"],
-            ["Go to Today / Calendar / Tasks", "G then T / C / K"],
-            ["Go to Assistant / Settings", "G then A / S"],
-            ["Calendar: previous / next", "← / →"],
-            ["Calendar: jump to today", "T"],
-            ["Calendar: day / week / month", "D / W / M"],
-            ["Close dialogs", "Esc"],
+            [msg("New event, task or note"), "N"],
+            [msg("Ask the assistant"), "/"],
+            [msg("Go to Today / Calendar / Tasks"), "G → T / C / K"],
+            [msg("Go to Assistant / Settings"), "G → A / S"],
+            [msg("Calendar: previous / next"), "← / →"],
+            [msg("Calendar: jump to today"), "T"],
+            [msg("Calendar: day / week / month"), "D / W / M"],
+            [msg("Close dialogs"), "Esc"],
           ].map(([a, b]) => (
             <div key={a} className="contents">
-              <dt className="text-ink-2">{a}</dt>
+              <dt className="text-ink-2">{t(a)}</dt>
               <dd>
                 <Kbd>{b}</Kbd>
               </dd>

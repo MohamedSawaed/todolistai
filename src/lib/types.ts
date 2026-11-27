@@ -96,6 +96,9 @@ export interface Preferences {
     /** Morning summary notification at `briefingTime` (local). */
     morningBriefing: boolean;
     briefingTime: string; // HH:mm
+    /** Evening prompt to review today's unfinished activities (asks; never assumes). */
+    eveningReview: boolean;
+    reviewTime: string; // HH:mm
   };
   /** Bumped when the default rules change, so saved settings can be upgraded. */
   reminderRulesVersion: number;

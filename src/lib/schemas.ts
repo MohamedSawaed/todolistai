@@ -121,6 +121,8 @@ export const preferencesSchema = z.object({
     defaultReminder: zReminder,
     morningBriefing: z.boolean(),
     briefingTime: zTime,
+    eveningReview: z.boolean(),
+    reviewTime: zTime,
   }),
   reminderRulesVersion: z.number().int().min(0),
   reminderRules: z
@@ -155,7 +157,7 @@ export function defaultPreferences(timezone = "UTC"): Preferences {
     defaultDurations: { event: 60, task: 30, study: 60, workout: 60 },
     defaultView: "week",
     bufferMinutes: 0,
-    notifications: { inApp: true, browser: false, defaultReminder: 15, morningBriefing: true, briefingTime: "08:00" },
+    notifications: { inApp: true, browser: false, defaultReminder: 15, morningBriefing: true, briefingTime: "08:00", eveningReview: true, reviewTime: "20:00" },
     reminderRules: DEFAULT_REMINDER_RULES,
     reminderRulesVersion: REMINDER_RULES_VERSION,
     theme: "system",

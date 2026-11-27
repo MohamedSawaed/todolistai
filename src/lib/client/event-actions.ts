@@ -9,7 +9,7 @@ import type { CalendarEvent, Interval } from "../types";
 
 /** Mark done / not done, dismiss a follow-up, or move an event — with toasts and undo. */
 export function useEventActions() {
-  const { prefs } = usePrefs();
+  const { prefs, t } = usePrefs();
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const qc = useQueryClient();
@@ -23,32 +23,32 @@ export function useEventActions() {
       } catch (err) {
         if (err instanceof ApiError && err.code === "version_conflict") {
           await qc.invalidateQueries({ queryKey: ["events"] });
-          toast({ message: "This changed on another device. Try again.", tone: "error" });
+          toast({ message: t("This changed on another device. Try again."), tone: "error" });
         } else if (!(err instanceof ApiError && err.code === "conflict")) {
-          toast({ message: err instanceof Error ? err.message : "Couldn't save", tone: "error" });
+          toast({ message: err instanceof Error ? t(err.message) : t("Couldn't save"), tone: "error" });
         }
         throw err;
       }
     },
-    [invalidate, qc, toast],
+    [invalidate, qc, toast, t],
   );
 
   const setDone = useCallback(
     async (event: CalendarEvent, done: boolean) => {
       const updated = await patch(event, { completed: done }).catch(() => null);
       if (updated && done) {
-        toast({ message: `Done: “${event.title}”`, action: { label: "Undo", onClick: () => void patch(updated, { completed: false }).catch(() => undefined) } });
+        toast({ message: t("Done: “{title}”", { title: event.title }), action: { label: t("Undo"), onClick: () => void patch(updated, { completed: false }).catch(() => undefined) } });
       }
     },
-    [patch, toast],
+    [patch, toast, t],
   );
 
   const dismissFollowUp = useCallback(
     async (event: CalendarEvent) => {
       const updated = await patch(event, { followUpDismissed: true }).catch(() => null);
-      if (updated) toast({ message: `Okay, I won't ask about “${event.title}” again`, action: { label: "Undo", onClick: () => void patch(updated, { followUpDismissed: false }).catch(() => undefined) } });
+      if (updated) toast({ message: t("Okay, I won't ask about “{title}” again", { title: event.title }), action: { label: t("Undo"), onClick: () => void patch(updated, { followUpDismissed: false }).catch(() => undefined) } });
     },
-    [patch, toast],
+    [patch, toast, t],
   );
 
   /** Move to a new slot; the server re-checks for conflicts. Returns false on conflict. */
@@ -58,19 +58,19 @@ export function useEventActions() {
       try {
         const updated = await patch(event, { startAt: slot.start, endAt: slot.end, completed: false, followUpDismissed: false });
         toast({
-          message: `Moved “${event.title}” to ${fmtSlot(slot.start, slot.end, prefs)}`,
-          action: { label: "Undo", onClick: () => void patch(updated, { ...before, allowOverlap: true }).catch(() => undefined) },
+          message: t("Moved “{title}” to {when}", { title: event.title, when: fmtSlot(slot.start, slot.end, prefs) }),
+          action: { label: t("Undo"), onClick: () => void patch(updated, { ...before, allowOverlap: true }).catch(() => undefined) },
         });
         return true;
       } catch (err) {
         if (err instanceof ApiError && err.code === "conflict") {
-          toast({ message: "That time was just taken. Pick another one.", tone: "error" });
+          toast({ message: t("That time was just taken. Pick another one."), tone: "error" });
           return false;
         }
         return false;
       }
     },
-    [patch, prefs, toast],
+    [patch, prefs, toast, t],
   );
 
   return { setDone, dismissFollowUp, moveTo };

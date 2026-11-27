@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { X } from "lucide-react";
 import type { CalendarEvent, Preferences } from "@/lib/types";
 import { api } from "@/lib/client/api";
-import { translate, isRtl, type MessageKey } from "@/lib/i18n";
+import { translate, isRtl, type TFunction } from "@/lib/i18n";
 import { cx } from "./ui";
 
 // ---------------------------------------------------------------- prefs
@@ -19,7 +19,9 @@ interface PrefsCtx {
   status: Status;
   signedIn: boolean;
   savePrefs: (next: Preferences) => Promise<void>;
-  t: (key: MessageKey) => string;
+  /** Apply preferences on screen without saving (e.g. language picked during onboarding). */
+  previewPrefs: (patch: Partial<Preferences>) => void;
+  t: TFunction;
 }
 const PrefsContext = createContext<PrefsCtx | null>(null);
 export const usePrefs = () => {
@@ -95,12 +97,14 @@ export function Providers({ children, initialPrefs, status, signedIn }: { childr
     if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
   }, []);
 
+  const previewPrefs = useCallback((patch: Partial<Preferences>) => setPrefs((p) => ({ ...p, ...patch })), []);
+
   const savePrefs = useCallback(async (next: Preferences) => {
     const res = await api<{ preferences: Preferences }>("/api/preferences", { method: "PUT", body: next });
     setPrefs(res.preferences);
   }, []);
 
-  const prefsValue = useMemo<PrefsCtx>(() => ({ prefs, status, signedIn, savePrefs, t: (k) => translate(prefs.locale, k) }), [prefs, status, signedIn, savePrefs]);
+  const prefsValue = useMemo<PrefsCtx>(() => ({ prefs, status, signedIn, savePrefs, previewPrefs, t: (k, v) => translate(prefs.locale, k, v) }), [prefs, status, signedIn, savePrefs, previewPrefs]);
 
   // toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -172,7 +176,7 @@ export function Providers({ children, initialPrefs, status, signedIn }: { childr
                       {t.action.label}
                     </button>
                   ) : null}
-                  <button aria-label="Dismiss" className="shrink-0 opacity-60 hover:opacity-100" onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}>
+                  <button aria-label={prefsValue.t("Dismiss")} className="shrink-0 opacity-60 hover:opacity-100" onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}>
                     <X className="size-3.5" />
                   </button>
                 </div>
