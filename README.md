@@ -75,6 +75,10 @@ app and showing notifications.
    creates a timer that calls `/api/push/dispatch` every minute.
 4. In Tempo → Settings, turn on **Phone notifications** and tap **Send a test notification**.
 
+**6. Later database updates.** Run each newer file in `supabase/migrations` once, in order:
+`0004_localized_notifications.sql` (notifications in each user's language, evening review) and
+`0005_capture_source.sql` (keeps where an imported event came from).
+
 Every push to `main` on GitHub redeploys automatically. If you change a `NEXT_PUBLIC_*`
 variable, redeploy so the new value is built in. `npm run test:db` checks the SQL migrations
 against a local Postgres without needing a Supabase project.
@@ -126,6 +130,26 @@ supabase/migrations      Schema, RLS policies, locked check-then-write functions
   Zod, and ids are resolved through the user-scoped repository.
 - **Minimal context.** The model receives only what its tool calls fetch, not the whole database.
 - **Reminders** come only from saved events and tasks, never from pending proposals.
+
+### Universal Capture (import from messages, screenshots, photos, PDFs)
+- **Entry points:** the paperclip in the assistant's composer (upload screenshot, take photo,
+  upload PDF, paste text), pasting an image into the chat, drag-and-drop on desktop, and
+  **Share → Tempo** on Android. The installed web app registers a Web Share Target
+  (`manifest.ts` → `public/sw.js`). iOS doesn't offer share targets to web apps, so iPhone users
+  upload or paste instead.
+- **Pipeline:** `api/capture` checks size and type by file signature, rejects protected or very long
+  PDFs, and sends the content to Claude (vision / PDF / text) with a structured-output schema
+  (`lib/ai/capture.ts`). The model only *describes* what it read. `lib/capture/process.ts` validates
+  every field, resolves dates in the right timezone (including DST and events that cross midnight),
+  and decides what's pre-selected. `services/capture.ts` checks the real calendar for conflicts,
+  alternatives, duplicates and overlaps inside the batch.
+- **Saving:** one confirmation saves all selected items through the same locked checked writes as
+  everything else. It re-checks conflicts and duplicates at save time and records an outcome per
+  item (added / updated / skipped / needs attention / failed). Retries never create an item twice.
+- **Privacy:** files are processed in memory and never stored. Only a short quote per item is kept
+  for review, and it is dropped when the import is finished or discarded. Imported events keep a
+  `source` (label + quote) that the user can remove from the event's details. Shared content is
+  treated as untrusted data: instructions inside it are ignored and can't trigger any action.
 
 ### Data model notes
 - Timed events store UTC `timestamptz` plus the IANA `timezone` they were created in. The UI

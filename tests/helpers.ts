@@ -25,6 +25,7 @@ export function eventInput(start: string, end: string, title = "Event", extra: P
     location: null,
     reminders: [],
     taskId: null,
+    source: null,
     ...extra,
   };
 }

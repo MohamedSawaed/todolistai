@@ -18,6 +18,14 @@ export const zReminders = z
 
 const trimmed = (max: number) => z.string().trim().min(1, "Required").max(max);
 
+export const eventSourceSchema = z.object({
+  type: z.enum(["text", "screenshot", "photo", "pdf"]),
+  label: z.string().max(80).nullable(),
+  fileName: z.string().max(200).nullable(),
+  importedAt: zIso,
+  excerpt: z.string().max(600).nullable(),
+});
+
 export const eventInputSchema = z
   .object({
     title: trimmed(200),
@@ -30,6 +38,7 @@ export const eventInputSchema = z
     location: z.string().max(300).nullable().default(null),
     reminders: zReminders.default([]),
     taskId: z.string().uuid().nullable().default(null),
+    source: eventSourceSchema.nullable().default(null),
   })
   .refine((v) => Date.parse(v.endAt) > Date.parse(v.startAt), { message: "End must be after start", path: ["endAt"] })
   .refine((v) => Date.parse(v.endAt) - Date.parse(v.startAt) <= 7 * 24 * 3600_000, {
@@ -51,6 +60,8 @@ export const eventPatchSchema = z.object({
   completed: z.boolean().optional(),
   /** "Didn't happen / not needed": stop asking about it. */
   followUpDismissed: z.boolean().optional(),
+  /** Only removal is allowed: forget where an imported event came from. */
+  source: z.null().optional(),
   expectedVersion: z.number().int().optional(),
   allowOverlap: z.boolean().optional(),
 });

@@ -29,9 +29,24 @@ export interface CalendarEvent {
   completedAt: string | null;
   /** The user answered the "did this happen?" follow-up without completing it. */
   followUpDismissedAt: string | null;
+  /** Where an imported event came from (Universal Capture). The user can remove it. */
+  source: EventSource | null;
   version: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export type CaptureSourceType = "text" | "screenshot" | "photo" | "pdf";
+
+/** What we keep about imported content: a label and the relevant quote — never the file itself. */
+export interface EventSource {
+  type: CaptureSourceType;
+  /** e.g. "WhatsApp message", "Appointment card" (as described by the AI) */
+  label: string | null;
+  fileName: string | null;
+  importedAt: string;
+  /** The part of the original content this item came from. */
+  excerpt: string | null;
 }
 
 export interface Subtask {
@@ -206,7 +221,90 @@ export type ProposalPayload =
       expectedVersion: number;
       before: number[];
       after: number[];
-    };
+    }
+  | CapturePayload;
+
+// ---------- Universal Capture ----------
+
+export type CaptureItemKind = "event" | "task" | "note";
+
+/** One activity found in shared content, after the server validated and resolved it. */
+export interface CaptureItem {
+  id: string;
+  /** What will be created. An event needs a date and a start time. */
+  kind: CaptureItemKind;
+  /** What the AI recognized it as. */
+  detected: "event" | "task" | "deadline" | "note";
+  title: string;
+  description: string | null;
+  instructions: string[];
+  participants: string[];
+  /** Local wall-clock values in `timezone`. */
+  date: string | null;
+  startTime: string | null;
+  endDate: string | null;
+  endTime: string | null;
+  /** True when no end or duration was given and the default length is used. */
+  durationAssumed: boolean;
+  timezone: string;
+  /** The content named a timezone different from the user's. */
+  zoneFromContent: boolean;
+  location: string | null;
+  category: Category;
+  reminders: number[];
+  confidence: "high" | "medium" | "low";
+  /** Fields the AI wasn't sure about. */
+  uncertain: ("title" | "date" | "time" | "end" | "location")[];
+  /** Needed details the content didn't give. */
+  missing: ("date" | "time" | "duration")[];
+  /** Another reading of the date (e.g. 03/04 → 3 April or 4 March). */
+  ambiguity: { note: string; alternativeDate: string | null } | null;
+  /** "tomorrow" etc. was read relative to today because the message's own date wasn't visible. */
+  relativeToToday: boolean;
+  past: boolean;
+  excerpt: string | null;
+  /** Pre-selected for "Add selected"? (not when something needs the user's decision) */
+  selected: boolean;
+  // ---- calendar analysis (by the scheduling engine, not the AI) ----
+  startAt: string | null;
+  endAt: string | null;
+  conflicts: ConflictInfo[];
+  alternatives: Slot[];
+  /** Other items in this import that overlap this one. */
+  overlapsItems: string[];
+  duplicate: CaptureDuplicate | null;
+}
+
+export interface CaptureDuplicate {
+  kind: "event" | "task";
+  id: string;
+  title: string;
+  startAt: string | null;
+  endAt: string | null;
+  dueDate: string | null;
+  version: number | null;
+}
+
+export type CaptureOutcome =
+  | { status: "added"; eventId?: string; taskId?: string; noteId?: string }
+  | { status: "updated"; eventId?: string; taskId?: string }
+  | { status: "skipped" }
+  | { status: "conflict"; conflicts: ConflictInfo[]; alternatives: Slot[] }
+  | { status: "duplicate"; duplicate: CaptureDuplicate }
+  | { status: "failed"; error: string };
+
+export interface CapturePayload {
+  kind: "capture";
+  source: { type: CaptureSourceType; label: string | null; fileName: string | null; fileCount: number; importedAt: string };
+  language: "en" | "ar" | "he" | "mixed" | "other";
+  summary: string;
+  /** Date the message was sent, when visible — used for "tomorrow" etc. */
+  messageDate: string | null;
+  warnings: string[];
+  notActionable: string | null;
+  items: CaptureItem[];
+  outcomes: Record<string, CaptureOutcome>;
+}
 
 export type ProposalKind = ProposalPayload["kind"];
 
@@ -228,7 +326,8 @@ export type ProposalResult =
   | { kind: "events_moved"; eventIds: string[] }
   | { kind: "event_deleted"; snapshot: CalendarEvent }
   | { kind: "task_updated"; taskId: string }
-  | { kind: "event_updated"; eventId: string };
+  | { kind: "event_updated"; eventId: string }
+  | { kind: "capture_applied"; added: number; updated: number; skipped: number };
 
 /** Choice the user makes on a proposal card (e.g. pick an alternative slot). */
 export interface ConfirmChoice {

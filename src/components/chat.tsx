@@ -8,6 +8,8 @@ import { ProposalCard } from "./proposal-card";
 import { api, ApiError } from "@/lib/client/api";
 import { msg } from "@/lib/i18n";
 import type { ChatMessageView, Proposal } from "@/lib/types";
+import { AttachButton, CapturePreview, CaptureProgress } from "./capture/capture-composer";
+import { buildCaptureForm, draftFromFiles, postCapture, type CaptureDraft } from "@/lib/client/capture";
 
 export const SUGGESTIONS = [
   { label: msg("Plan my day"), prompt: msg("Plan my day — what's on today and when could I fit in my open tasks?"), icon: Sun },
@@ -21,7 +23,7 @@ interface Thread {
   messages: ChatMessageView[];
 }
 
-export function ChatView({ compact = false }: { compact?: boolean }) {
+export function ChatView({ compact = false, incoming = null }: { compact?: boolean; incoming?: CaptureDraft | null }) {
   const { prefs, status, t } = usePrefs();
   const ui = useAppUI();
   const qc = useQueryClient();
@@ -33,6 +35,19 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
   const scroller = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [loaded, setLoaded] = useState(false);
+  // Universal Capture: content waiting to be read, and whether it's being read now
+  const [draft, setDraft] = useState<CaptureDraft | null>(null);
+  const [capturing, setCapturing] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  // content shared from another app arrives through the page
+  const [seenIncoming, setSeenIncoming] = useState<CaptureDraft | null>(null);
+  if (incoming && incoming !== seenIncoming) {
+    setSeenIncoming(incoming);
+    setDraft(incoming);
+    setCaptureError(null);
+  }
 
   if (history.data && !loaded) {
     setLoaded(true);
@@ -73,6 +88,34 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
     }
   }
 
+  async function sendCapture() {
+    if (!draft || capturing) return;
+    setCaptureError(null);
+    setError(null);
+    setCapturing(true);
+    try {
+      const form = await buildCaptureForm(draft, thread.conversationId);
+      const res = await postCapture<{ conversationId: string; userMessage: ChatMessageView; reply: ChatMessageView }>(form);
+      setThread((t) => ({ conversationId: res.conversationId, messages: [...t.messages, res.userMessage, res.reply] }));
+      setDraft(null);
+    } catch (err) {
+      // the content stays in the preview so nothing is lost
+      setCaptureError(err instanceof ApiError ? t(err.message) : t("Something went wrong. Please try again."));
+    } finally {
+      setCapturing(false);
+    }
+  }
+
+  function takeFiles(files: File[]) {
+    if (!files.length || capturing) return;
+    const d = draftFromFiles(files);
+    if ("error" in d) setCaptureError(t(d.error));
+    else {
+      setCaptureError(null);
+      setDraft(d);
+    }
+  }
+
   // prompts queued from elsewhere (Today composer, "Reschedule with AI")
   const sendRef = useRef(send);
   useEffect(() => {
@@ -89,11 +132,32 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
   const updateProposal = (p: Proposal) =>
     setThread((t) => ({ ...t, messages: t.messages.map((m) => ({ ...m, proposals: m.proposals.map((x) => (x.id === p.id ? p : x)) })) }));
 
-  const empty = thread.messages.length === 0 && !sending;
+  const empty = thread.messages.length === 0 && !sending && !capturing;
   const firstName = prefs.displayName.split(" ")[0];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="relative flex min-h-0 flex-1 flex-col"
+      onDragOver={(e) => {
+        if (!status.ai || !e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        setDragging(false);
+        takeFiles([...e.dataTransfer.files]);
+      }}
+    >
+      {dragging ? (
+        <div className="pointer-events-none absolute inset-2 z-20 grid place-items-center rounded-2xl border-2 border-dashed border-primary bg-primary-soft/70 text-[14px] font-medium text-primary-ink backdrop-blur-sm">
+          {t("Drop a screenshot, photo or PDF to find activities")}
+        </div>
+      ) : null}
       <div ref={scroller} className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
         <div className={cx("mx-auto flex w-full flex-col gap-4", compact ? "px-4 py-4" : "max-w-2xl px-4 py-6 sm:px-6")}>
           {history.isLoading ? (
@@ -131,6 +195,7 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
           ) : (
             thread.messages.map((m) => <Message key={m.id} m={m} onUpdate={updateProposal} />)
           )}
+          {capturing ? <CaptureProgress /> : null}
           {sending ? (
             <div className="flex items-center gap-2 text-[13px] text-ink-3" aria-live="polite">
               <span className="flex gap-1 rounded-2xl rounded-ss-md bg-surface-2 px-3.5 py-3" aria-label={t("Assistant is thinking")}>
@@ -165,13 +230,40 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
               </span>
             </div>
           ) : null}
+          {draft ? (
+            <CapturePreview
+              draft={draft}
+              busy={capturing}
+              onChange={setDraft}
+              onReplace={(d) => {
+                setCaptureError(null);
+                setDraft(d);
+              }}
+              onSend={() => void sendCapture()}
+              onRemove={() => {
+                setDraft(null);
+                setCaptureError(null);
+              }}
+            />
+          ) : null}
+          {captureError ? (
+            <div role="alert" className="mb-2 flex animate-rise items-start gap-2.5 rounded-xl border border-danger/25 bg-danger-soft px-3 py-2.5 text-[12.5px]">
+              <span className="min-w-0 flex-1">{captureError}</span>
+              {draft ? (
+                <Button size="sm" variant="secondary" onClick={() => void sendCapture()} disabled={capturing}>
+                  <RotateCcw className="size-3.5" />{" "}{t("Retry")}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               void send(input);
             }}
-            className="flex items-end gap-2 rounded-2xl border border-line bg-surface p-1.5 ps-3.5 shadow-[var(--shadow-sm)] transition-colors focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10"
+            className="flex items-end gap-1 rounded-2xl border border-line bg-surface p-1.5 shadow-[var(--shadow-sm)] transition-colors focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10"
           >
+            <AttachButton disabled={!status.ai || capturing} onDraft={(d) => { setCaptureError(null); setDraft(d); }} onError={setCaptureError} />
             <textarea
               id={compact ? undefined : "assistant-input"}
               ref={inputRef}
@@ -183,6 +275,14 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
                 e.target.style.height = "auto";
                 e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
               }}
+              onPaste={(e) => {
+                // pasting a screenshot reads it instead of dropping it
+                const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/") || f.type === "application/pdf");
+                if (files.length) {
+                  e.preventDefault();
+                  takeFiles(files);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
@@ -191,7 +291,7 @@ export function ChatView({ compact = false }: { compact?: boolean }) {
               }}
               placeholder={t("Tell me what you need to do...")}
               aria-label={t("Message the assistant")}
-              className="max-h-[140px] min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[14.5px] outline-none placeholder:text-ink-3 disabled:opacity-60"
+              className="max-h-[140px] min-h-[36px] flex-1 resize-none bg-transparent px-1 py-2 text-[14.5px] outline-none placeholder:text-ink-3 disabled:opacity-60"
             />
             <Button type="submit" variant="primary" size="icon" aria-label={t("Send")} disabled={!input.trim() || sending || !status.ai} className="size-9 rounded-xl">
               <ArrowUp className="size-4" />

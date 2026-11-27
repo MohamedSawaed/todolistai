@@ -9,6 +9,7 @@ import type { ConfirmChoice, Preferences, Proposal, ProposalPayload, ProposalRes
 import { eventInputSchema } from "../schemas";
 import { validateInterval } from "../scheduling/engine";
 import { analyzeSlot } from "./scheduling";
+import { msg } from "../i18n";
 
 export const PROPOSAL_TTL_MS = 24 * 3600_000;
 
@@ -118,6 +119,9 @@ async function execute(repo: Repository, prefs: Preferences, proposal: Proposal,
       const note = await repo.createNote(p.note);
       return { ok: true, result: { kind: "note_created", noteId: note.id } };
     }
+    case "capture":
+      // imports are saved item by item through services/capture.ts
+      throw new ProposalStateError(msg("Use the import card to add these items."));
     case "update_reminders": {
       // reminders don't change the time, so no conflict check is needed — only the version
       await repo.updateEventChecked(p.eventId, { reminders: p.after }, { ...check, expectedVersion: p.expectedVersion });
@@ -178,6 +182,8 @@ export async function undoProposal(repo: Repository, prefs: Preferences, id: str
           if (!(e instanceof NotFoundError)) throw e;
         });
         break;
+      case "capture_applied":
+        throw new ProposalStateError(msg("Imported items can be changed or deleted from the calendar."));
       case "event_updated":
         if (payload.kind === "update_reminders") await repo.updateEventChecked(r.eventId, { reminders: payload.before }, { allowOverlap: true, bufferMinutes: 0 });
         break;

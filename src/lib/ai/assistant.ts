@@ -183,7 +183,7 @@ export async function loadConversation(repo: Repository, conversationId: string)
   }));
 }
 
-function toAssistantError(err: unknown): AssistantError {
+export function toAssistantError(err: unknown): AssistantError {
   if (err instanceof Anthropic.APIConnectionError) return new AssistantError("Couldn't reach the AI service. Check the server's connection.", 503);
   if (err instanceof Anthropic.AuthenticationError) return new AssistantError("The AI service rejected the API key. Check ANTHROPIC_API_KEY on the server.", 503);
   if (err instanceof Anthropic.RateLimitError) return new AssistantError("The assistant is busy right now. Please try again in a moment.", 429);

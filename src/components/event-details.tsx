@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { CalendarClock, Clock, Lock, MapPin, Pencil, Sparkles, StickyNote, Trash2, Unlock, Bell } from "lucide-react";
+import { CalendarClock, Clock, Lock, MapPin, Pencil, Sparkles, StickyNote, Trash2, Unlock, Bell, ScanText } from "lucide-react";
 import { useAppUI, usePrefs, useToast } from "./providers";
 import { Badge, Button, CheckCircle, Sheet, cx } from "./ui";
 import { EventForm } from "./composer";
@@ -8,9 +8,11 @@ import { describeReminders } from "@/lib/reminders";
 import { CATEGORY_META } from "./pickers";
 import { api, ApiError } from "@/lib/client/api";
 import { useInvalidateAll, useTasks } from "@/lib/client/hooks";
-import { fmtDayLong, fmtDuration, fmtTimeRange } from "@/lib/client/format";
-import { intlLocale } from "@/lib/i18n";
+import { dt, fmtDate, fmtDayLong, fmtDuration, fmtTimeRange } from "@/lib/client/format";
+import { intlLocale, msg } from "@/lib/i18n";
 import type { CalendarEvent } from "@/lib/types";
+
+const SOURCE_TYPE = { text: msg("pasted text"), screenshot: msg("a screenshot"), photo: msg("a photo"), pdf: msg("a PDF") } as const;
 
 export function EventDetails() {
   const { activeEvent, closeEvent, openComposer, askAssistant } = useAppUI();
@@ -34,6 +36,21 @@ export function EventDetails() {
   const task = event.taskId ? tasks.data?.find((t) => t.id === event.taskId) : undefined;
   const meta = CATEGORY_META[event.category];
   const minutes = Math.round((Date.parse(event.endAt) - Date.parse(event.startAt)) / 60000);
+
+  async function removeSource() {
+    if (!event) return;
+    setBusy(true);
+    try {
+      const res = await api<{ event: CalendarEvent }>(`/api/events/${event.id}`, { method: "PATCH", body: { source: null, expectedVersion: event.version } });
+      setEvent(res.event);
+      await invalidate();
+      toast({ message: t("Source info removed") });
+    } catch (err) {
+      toast({ message: err instanceof ApiError ? t(err.message) : t("Something went wrong."), tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function remove() {
     if (!event) return;
@@ -118,7 +135,28 @@ export function EventDetails() {
             {event.description ? (
               <li className="flex items-start gap-3">
                 <StickyNote className="mt-0.5 size-4 text-ink-3" />
-                <p className="whitespace-pre-wrap text-ink-2">{event.description}</p>
+                <p dir="auto" className="whitespace-pre-wrap text-ink-2">{event.description}</p>
+              </li>
+            ) : null}
+            {event.source ? (
+              <li className="flex items-start gap-3">
+                <ScanText className="mt-0.5 size-4 text-ink-3" />
+                <div className="min-w-0 flex-1 text-[13px]">
+                  <p className="text-ink-2">
+                    {t("Imported from {source} · {date}", {
+                      source: event.source.label ?? event.source.fileName ?? t(SOURCE_TYPE[event.source.type]),
+                      date: fmtDate(dt(event.source.importedAt, prefs), prefs.locale, "short"),
+                    })}
+                  </p>
+                  {event.source.excerpt ? (
+                    <p dir="auto" className="mt-1 rounded-lg bg-surface-2 px-2.5 py-1.5 whitespace-pre-wrap text-ink-2">
+                      “{event.source.excerpt}”
+                    </p>
+                  ) : null}
+                  <button type="button" disabled={busy} onClick={() => void removeSource()} className="mt-1 text-[12px] font-medium text-ink-3 underline-offset-2 hover:text-danger hover:underline">
+                    {t("Remove source info")}
+                  </button>
+                </div>
               </li>
             ) : null}
           </ul>

@@ -120,5 +120,15 @@ const pastId = (await as(A, `select (create_event_checked($1::jsonb, true, 0) ->
 const dis = (await as(A, `select update_event_checked($1, $2::jsonb, null, false, 0) as r`, [pastId, JSON.stringify({ followUpDismissedAt: new Date().toISOString() })]))[0].r;
 ok(dis.ok === true && dis.event.followup_dismissed_at !== null, "follow-up can be dismissed");
 
+// Universal Capture: imported events keep their source until the user removes it
+const src = { type: "screenshot", label: "WhatsApp message", fileName: null, importedAt: "2026-11-27T10:00:00Z", excerpt: "Please arrive 10 minutes early." };
+const imp = (await as(A, `select create_event_checked($1::jsonb, true, 0) as r`, [ev("Dentist", "2027-02-03T09:30:00Z", "2027-02-03T10:30:00Z", { source: src })]))[0].r;
+ok(imp.ok === true && imp.event.source?.excerpt === src.excerpt, "imported event stores its source");
+const plain = (await as(A, `select create_event_checked($1::jsonb, true, 0) as r`, [ev("Plain", "2027-02-04T09:30:00Z", "2027-02-04T10:30:00Z")]))[0].r;
+ok(plain.ok === true && plain.event.source === null, "events without a source have none");
+const rm = (await as(A, `select update_event_checked($1, '{"source":null}'::jsonb, null, false, 0) as r`, [imp.event.id]))[0].r;
+ok(rm.ok === true && rm.event.source === null && rm.event.title === "Dentist", "source can be removed without touching the event");
+ok((await as(B, `select * from calendar_events where source is not null`)).length === 0, "user B cannot read user A's import sources");
+
 console.log(failures ? `\n${failures} FAILED` : "\nALL CHECKS PASSED");
 process.exit(failures ? 1 : 0);

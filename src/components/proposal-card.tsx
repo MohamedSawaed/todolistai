@@ -11,10 +11,17 @@ import { fmtRelativeDay, fmtSlot, fmtTime, fmtTimeRange, dt } from "@/lib/client
 import { describeReminders } from "@/lib/reminders";
 import { countLabel, msg, type TFunction } from "@/lib/i18n";
 import type { Interval, Proposal } from "@/lib/types";
+import { CaptureCard } from "./capture/capture-card";
 
 type ConfirmResponse = { status: "applied" | "conflict" | "stale"; proposal: Proposal; message?: string };
 
-export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpdate: (p: Proposal) => void }) {
+export function ProposalCard(props: { proposal: Proposal; onUpdate: (p: Proposal) => void }) {
+  // imports from Universal Capture have their own review card (many items, one confirmation)
+  if (props.proposal.payload.kind === "capture") return <CaptureCard {...props} />;
+  return <ActionCard {...props} />;
+}
+
+function ActionCard({ proposal, onUpdate }: { proposal: Proposal; onUpdate: (p: Proposal) => void }) {
   const { prefs, t } = usePrefs();
   const toast = useToast();
   const invalidate = useInvalidateAll();
@@ -73,6 +80,8 @@ export function ProposalCard({ proposal, onUpdate }: { proposal: Proposal; onUpd
 
   let body: React.ReactNode = null;
   switch (p.kind) {
+    case "capture":
+      break;
     case "create_event": {
       const meta = CATEGORY_META[p.event.category];
       const hasConflict = p.conflicts.length > 0;
@@ -339,6 +348,8 @@ function successMessage(p: Proposal, t: TFunction): string {
       return t("Note saved");
     case "update_reminders":
       return t("Reminders updated for “{title}”", { title: p.payload.title });
+    case "capture":
+      return t("Saved");
   }
 }
 

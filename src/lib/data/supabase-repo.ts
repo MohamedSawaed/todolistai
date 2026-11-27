@@ -40,6 +40,8 @@ function toEvent(r: Row): CalendarEvent {
     taskId: r.task_id,
     completedAt: iso(r.completed_at),
     followUpDismissedAt: iso(r.followup_dismissed_at ?? null),
+    // added by migration 0005; older databases simply have no source
+    source: (r.source as CalendarEvent["source"] | undefined) ?? null,
     version: r.version,
     createdAt: iso(r.created_at)!,
     updatedAt: iso(r.updated_at)!,
@@ -221,6 +223,7 @@ export class SupabaseRepository implements Repository {
           task_id: s.taskId,
           completed_at: s.completedAt,
           followup_dismissed_at: s.followUpDismissedAt,
+          ...(s.source ? { source: s.source } : {}),
           version: s.version + 1,
         })
         .select("*")

@@ -4,6 +4,7 @@ import { UnauthorizedError, requireSession, type Session } from "./auth";
 import { NotFoundError, VersionConflictError } from "./data/repository";
 import { ProposalStateError } from "./services/proposals";
 import { AssistantError } from "./ai/assistant";
+import { CaptureInputError } from "./capture/process";
 
 export class HttpError extends Error {
   constructor(
@@ -51,6 +52,7 @@ export function errorResponse(err: unknown): Response {
   if (err instanceof NotFoundError) return json({ error: err.message, code: "not_found" }, 404);
   if (err instanceof VersionConflictError) return json({ error: err.message, code: "version_conflict", current: err.current }, 409);
   if (err instanceof ProposalStateError) return json({ error: err.message, code: "proposal_state" }, 409);
+  if (err instanceof CaptureInputError) return json({ error: err.message, code: "capture_input" }, 422);
   if (err instanceof AssistantError) return json({ error: err.message, code: "assistant" }, err.status);
   if (err instanceof HttpError) return json({ error: err.message, ...err.body }, err.status);
   console.error(err);

@@ -49,6 +49,7 @@ export class LocalStore {
       for (const e of this.db.events as (CalendarEvent & { reminderMinutes?: number | null })[]) {
         if (!Array.isArray(e.reminders)) e.reminders = e.reminderMinutes == null ? [] : [e.reminderMinutes];
         if (e.followUpDismissedAt === undefined) e.followUpDismissedAt = null;
+        if (e.source === undefined) e.source = null;
         delete e.reminderMinutes;
       }
     } catch (e) {
