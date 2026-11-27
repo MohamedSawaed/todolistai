@@ -6,6 +6,9 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Tempo — your time, intelligently organized",
     short_name: "Tempo",
     description: "A personal planner that turns your plans into a schedule.",
+    // a stable identity and scope let Android update the installed app (incl. the share target)
+    id: "/",
+    scope: "/",
     start_url: "/",
     display: "standalone",
     background_color: "#fafafc",
