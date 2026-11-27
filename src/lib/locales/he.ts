@@ -712,4 +712,7 @@ export const he: Record<string, string> = {
   "shared content": "תוכן משותף",
   "Use the import card to add these items.": "השתמשו בכרטיס הייבוא כדי להוסיף את הפריטים האלה.",
   "Imported items can be changed or deleted from the calendar.": "אפשר לשנות או למחוק פריטים מיובאים מתוך היומן.",
+  "Paste from clipboard": "הדבקה מהלוח",
+  "The clipboard is empty. Copy the message first (long-press → Copy).": "הלוח ריק. העתיקו קודם את ההודעה (לחיצה ארוכה ← העתקה).",
+  "Couldn't read the clipboard. Long-press in the box above and choose Paste.": "לא ניתן לקרוא את הלוח. לחצו לחיצה ארוכה בתיבה למעלה ובחרו הדבקה.",
 };

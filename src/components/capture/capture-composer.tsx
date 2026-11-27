@@ -111,6 +111,9 @@ export function CapturePreview({
   const urls = useMemo(() => draft.files.map((f) => (f.type.startsWith("image/") ? URL.createObjectURL(f) : null)), [draft.files]);
   useEffect(() => () => urls.forEach((u) => u && URL.revokeObjectURL(u)), [urls]);
   const canSend = draft.type === "text" ? draft.text.trim().length > 0 : draft.files.length > 0;
+  // one-tap paste for text copied from apps that can't share (e.g. WhatsApp text messages)
+  const clipboardReadable = typeof navigator !== "undefined" && !!navigator.clipboard?.readText;
+  const [clipNote, setClipNote] = useState<string | null>(null);
 
   return (
     <div className="mb-2 animate-rise rounded-2xl border border-primary/25 bg-primary-soft/30 p-2.5">
@@ -134,7 +137,28 @@ export function CapturePreview({
           maxLength={20000}
           className="h-28 w-full resize-y rounded-xl border border-line bg-surface px-3 py-2 text-[13.5px] outline-none focus:border-primary"
         />
-      ) : draft.type === "pdf" ? (
+      ) : null}
+      {draft.type === "text" && !draft.text.trim() && clipboardReadable ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            try {
+              const text = await navigator.clipboard.readText();
+              if (text.trim()) onChange({ ...draft, text: text.slice(0, 20000) });
+              else setClipNote(t("The clipboard is empty. Copy the message first (long-press → Copy)."));
+            } catch {
+              setClipNote(t("Couldn't read the clipboard. Long-press in the box above and choose Paste."));
+            }
+          }}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12.5px] font-medium hover:border-primary/50"
+        >
+          <ClipboardPaste className="size-3.5 text-primary" />
+          {t("Paste from clipboard")}
+        </button>
+      ) : null}
+      {clipNote && draft.type === "text" && !draft.text.trim() ? <p className="mt-1.5 text-[12px] text-ink-3">{clipNote}</p> : null}
+      {draft.type === "text" ? null : draft.type === "pdf" ? (
         <div className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5">
           <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-danger-soft text-danger">
             <FileText className="size-5" />

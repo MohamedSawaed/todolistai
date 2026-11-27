@@ -713,4 +713,7 @@ export const ar: Record<string, string> = {
   "shared content": "محتوى مُشارَك",
   "Use the import card to add these items.": "استخدم بطاقة الاستيراد لإضافة هذه العناصر.",
   "Imported items can be changed or deleted from the calendar.": "يمكن تغيير العناصر المستوردة أو حذفها من التقويم.",
+  "Paste from clipboard": "لصق من الحافظة",
+  "The clipboard is empty. Copy the message first (long-press → Copy).": "الحافظة فارغة. انسخ الرسالة أولًا (ضغطة مطوّلة ← نسخ).",
+  "Couldn't read the clipboard. Long-press in the box above and choose Paste.": "تعذّرت قراءة الحافظة. اضغط مطوّلًا في المربع أعلاه واختر لصق.",
 };
