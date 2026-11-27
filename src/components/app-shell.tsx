@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { CalendarDays, CheckSquare, Home, Keyboard, Plus, Settings, Sparkles, X } from "lucide-react";
 import { useAppUI, usePrefs } from "./providers";
+import { ThinkingBlob } from "./blob";
 import { Button, Kbd, Sheet, cx } from "./ui";
 import { Composer } from "./composer";
 import { EventDetails } from "./event-details";
@@ -21,13 +22,8 @@ const NAV: { href: string; msg: string; icon: typeof Home }[] = [
 export function Logo({ className }: { className?: string }) {
   return (
     <span className={cx("inline-flex items-center gap-2 font-semibold tracking-tight", className)}>
-      <span className="relative grid size-7 place-items-center rounded-[9px] bg-primary text-white shadow-[0_2px_8px_rgb(118_101_216/0.35)]">
-        <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-          <circle cx="10" cy="10" r="6.5" />
-          <path d="M10 6.5V10l2.5 1.5" />
-        </svg>
-      </span>
-      <span className="text-[16px]">Tempo</span>
+      <ThinkingBlob size={30} still />
+      <span className="text-[16px]">PlanMind</span>
     </span>
   );
 }
@@ -105,7 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               onClick={() => ui.setAssistantOpen(!ui.assistantOpen)}
               className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 text-start text-[13px] text-ink-2 transition-colors hover:border-primary/40 hover:text-ink"
             >
-              <Sparkles className="size-4 text-primary" />
+              <ThinkingBlob size={20} still />
               <span className="flex-1">{ui.assistantOpen ? t("Hide assistant") : t("Ask assistant")}</span>
               <Kbd>/</Kbd>
             </button>
@@ -133,7 +129,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <div className="flex items-center justify-between border-b border-line px-4 py-3">
               <span className="flex items-center gap-2 text-[14px] font-semibold">
-                <Sparkles className="size-4 text-primary" /> {t("Assistant")}
+                <ThinkingBlob size={22} /> {t("Assistant")}
               </span>
               <div className="flex items-center gap-1">
                 <Link href="/assistant" className="rounded-lg px-2 py-1 text-[12px] text-ink-2 hover:bg-surface-2" onClick={() => ui.setAssistantOpen(false)}>

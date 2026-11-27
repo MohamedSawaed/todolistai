@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { usePrefs } from "@/components/providers";
-import { Info, Sparkles } from "lucide-react";
+import { Info } from "lucide-react";
+import { ThinkingBlob } from "@/components/blob";
 import { ChatView } from "@/components/chat";
 import { takeSharedContent, type CaptureDraft } from "@/lib/client/capture";
 
@@ -10,7 +11,7 @@ export default function AssistantPage() {
   const [incoming, setIncoming] = useState<CaptureDraft | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
 
-  // Arrived from "Share → Tempo" in another app: pick up what was shared.
+  // Arrived from "Share → PlanMind" in another app: pick up what was shared.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("share") !== "1") return;
     window.history.replaceState(null, "", "/assistant");
@@ -24,9 +25,7 @@ export default function AssistantPage() {
   return (
     <div className="flex h-[calc(100dvh-76px-env(safe-area-inset-bottom))] flex-col lg:h-dvh">
       <header className="flex items-center gap-2.5 border-b border-line px-4 py-3.5 sm:px-6">
-        <span className="grid size-8 place-items-center rounded-xl bg-primary-soft text-primary">
-          <Sparkles className="size-4" />
-        </span>
+        <ThinkingBlob size={36} />
         <div>
           <h1 className="text-[16px] font-semibold tracking-tight">{t("Assistant")}</h1>
           <p className="text-[12px] text-ink-2">{t("Plans with your real calendar. Changes always wait for your OK.")}</p>

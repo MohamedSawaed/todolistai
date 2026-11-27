@@ -297,10 +297,10 @@ export function Skeleton({ className }: { className?: string }) {
   return <span className={cx("skeleton block", className)} aria-hidden />;
 }
 
-export function EmptyState({ icon, title, body, actions }: { icon: ReactNode; title: string; body?: string; actions?: ReactNode }) {
+export function EmptyState({ icon, art, title, body, actions }: { icon?: ReactNode; art?: ReactNode; title: string; body?: string; actions?: ReactNode }) {
   return (
     <div className="flex animate-fade-in flex-col items-center rounded-3xl border border-dashed border-line-strong px-6 py-12 text-center">
-      <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-primary-soft text-primary">{icon}</div>
+      {art ? <div className="mb-3">{art}</div> : <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-primary-soft text-primary">{icon}</div>}
       <p className="text-[15px] font-semibold">{title}</p>
       {body ? <p className="mt-1 max-w-sm text-[13.5px] text-ink-2">{body}</p> : null}
       {actions ? <div className="mt-5 flex flex-wrap justify-center gap-2">{actions}</div> : null}

@@ -2,8 +2,9 @@
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DateTime } from "luxon";
-import { CalendarClock, CalendarPlus, CheckSquare, ChevronDown, Plus, Sparkles, StickyNote, Trash2 } from "lucide-react";
+import { CalendarClock, CalendarPlus, ChevronDown, Plus, Sparkles, StickyNote, Trash2 } from "lucide-react";
 import { useAppUI, usePrefs, useToast } from "@/components/providers";
+import { ThinkingBlob } from "@/components/blob";
 import { Badge, Button, CheckCircle, EmptyState, Field, Input, Select, Skeleton, Textarea, cx } from "@/components/ui";
 import { CATEGORY_META, PRIORITY_META, PriorityPicker } from "@/components/pickers";
 import { useNotes, useTaskMutations, useTasks, useInvalidateAll, type TaskWithSessions } from "@/lib/client/hooks";
@@ -138,7 +139,7 @@ function Tasks() {
               </div>
             ) : list.length === 0 ? (
               <EmptyState
-                icon={<CheckSquare className="size-6" />}
+                art={<ThinkingBlob state={view === "overdue" ? "success" : "resting"} size={64} />}
                 title={view === "completed" ? t("No completed tasks yet.") : view === "overdue" ? t("Nothing overdue. Nice.") : t("No tasks here.")}
                 body={view === "completed" ? undefined : t("Add a task, or tell the assistant something like “I need to finish my project by Friday.”")}
                 actions={

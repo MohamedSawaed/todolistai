@@ -1,6 +1,6 @@
-# Tempo — AI calendar & to-do assistant
+# PlanMind — AI calendar & to-do assistant
 
-*Your time, intelligently organized.* Tempo combines a calendar, a task manager, notes and a
+*Your time, intelligently organized.* PlanMind combines a calendar, a task manager, notes and a
 conversational planning assistant. The assistant reads your real schedule, finds free time,
 detects conflicts, and **proposes** changes that you confirm. It never writes on its own.
 
@@ -73,7 +73,7 @@ app and showing notifications.
 3. In Supabase run `supabase/migrations/0003_push_and_followups.sql`, then
    `supabase/setup-cron.example.sql` with your app URL and the same `CRON_SECRET`. This
    creates a timer that calls `/api/push/dispatch` every minute.
-4. In Tempo → Settings, turn on **Phone notifications** and tap **Send a test notification**.
+4. In PlanMind → Settings, turn on **Phone notifications** and tap **Send a test notification**.
 
 **6. Later database updates.** Run each newer file in `supabase/migrations` once, in order:
 `0004_localized_notifications.sql` (notifications in each user's language, evening review) and
@@ -134,7 +134,7 @@ supabase/migrations      Schema, RLS policies, locked check-then-write functions
 ### Universal Capture (import from messages, screenshots, photos, PDFs)
 - **Entry points:** the paperclip in the assistant's composer (upload screenshot, take photo,
   upload PDF, paste text), pasting an image into the chat, drag-and-drop on desktop, and
-  **Share → Tempo** on Android. The installed web app registers a Web Share Target
+  **Share → PlanMind** on Android. The installed web app registers a Web Share Target
   (`manifest.ts` → `public/sw.js`). iOS doesn't offer share targets to web apps, so iPhone users
   upload or paste instead.
 - **Pipeline:** `api/capture` checks size and type by file signature, rejects protected or very long

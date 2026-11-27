@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 /**
- * Android "Share → Tempo" lands here as a POST. Normally the service worker handles it
+ * Android "Share → PlanMind" lands here as a POST. Normally the service worker handles it
  * in the browser (files included) and this route never runs. If the service worker
  * wasn't active yet, keep any shared text in the browser — never in a URL or on the
  * server — and open the assistant. Shared files can't be passed along this way, so the
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     /* nothing usable */
   }
   const data = JSON.stringify({ text, droppedFiles }).replace(/</g, "\u003c");
-  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tempo</title><script>try{sessionStorage.setItem("tempo.share",${JSON.stringify(data)})}catch(e){}location.replace("/assistant?share=1")</script>`;
+  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PlanMind</title><script>try{sessionStorage.setItem("tempo.share",${JSON.stringify(data)})}catch(e){}location.replace("/assistant?share=1")</script>`;
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 

@@ -7,6 +7,7 @@ import { ArrowRight, CalendarDays, MousePointerClick, Sparkles } from "lucide-re
 import { usePrefs } from "./providers";
 import { Button, Field, Input, cx } from "./ui";
 import { Logo } from "./app-shell";
+import { ThinkingBlob } from "./blob";
 import { AvailabilityFields, ClockField, LanguageField, TimezoneField } from "./preferences-form";
 import { createSupabaseBrowserClient, googleAuthEnabled } from "@/lib/supabase/client";
 import { isValidZone } from "@/lib/scheduling/time";
@@ -258,7 +259,7 @@ function WelcomeArt() {
   return (
     <div className="relative h-44 overflow-hidden rounded-3xl border border-line bg-surface p-4 shadow-soft" aria-hidden>
       <div className="flex items-center gap-2 rounded-2xl border border-line bg-surface-2/60 px-3 py-2.5 text-[13px] text-ink-2">
-        <Sparkles className="size-4 text-primary" />{" "}{t("Tomorrow at 5 PM I need to visit the dentist")}
+        <ThinkingBlob size={22} still />{" "}{t("Tomorrow at 5 PM I need to visit the dentist")}
       </div>
       <div className="mt-3 ms-6 animate-rise rounded-2xl border border-line bg-surface p-3" style={{ animationDelay: "250ms", animationFillMode: "backwards" }}>
         <div data-cat="health" className="flex gap-2.5">
@@ -270,6 +271,8 @@ function WelcomeArt() {
           <span className="ms-auto self-center rounded-lg bg-primary px-2.5 py-1 text-[12px] font-medium text-white">{t("Add")}</span>
         </div>
       </div>
+      {/* the assistant, quietly pleased it found the time */}
+      <ThinkingBlob state="success" size={70} className="absolute end-4 bottom-1" />
     </div>
   );
 }

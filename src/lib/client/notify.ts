@@ -19,7 +19,7 @@ async function readyRegistration(timeoutMs = 8000): Promise<ServiceWorkerRegistr
 }
 
 export async function enableNotifications(): Promise<NotifyResult> {
-  if (typeof Notification === "undefined") return { ok: false, reason: msg("This browser doesn't support notifications. On Android, open Tempo in Chrome.") };
+  if (typeof Notification === "undefined") return { ok: false, reason: msg("This browser doesn't support notifications. On Android, open PlanMind in Chrome.") };
   if (Notification.permission === "denied") return { ok: false, reason: blockedHelp() };
   const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   if (perm !== "granted") return { ok: false, reason: blockedHelp() };
@@ -39,7 +39,7 @@ export async function showSystemNotification(title: string, body: string, tag?: 
     new Notification(title, { body, tag, icon: "/icon-192.png" }); // desktop browsers without a service worker
     return { ok: true };
   } catch (e) {
-    return { ok: false, reason: msg("The notification couldn't be shown. Reload Tempo and try again.") };
+    return { ok: false, reason: msg("The notification couldn't be shown. Reload PlanMind and try again.") };
   }
 }
 
@@ -65,7 +65,7 @@ export async function subscribeToPush(): Promise<NotifyResult> {
   const perm = await enableNotifications();
   if (!perm.ok) return perm;
   const reg = await readyRegistration();
-  if (!reg || !("pushManager" in reg)) return { ok: false, reason: msg("This browser can't receive notifications while closed. On iPhone, add Tempo to the Home Screen first.") };
+  if (!reg || !("pushManager" in reg)) return { ok: false, reason: msg("This browser can't receive notifications while closed. On iPhone, add PlanMind to the Home Screen first.") };
   try {
     const sub =
       (await reg.pushManager.getSubscription()) ??
@@ -96,5 +96,5 @@ export async function sendServerTestPush(): Promise<NotifyResult> {
 }
 
 function blockedHelp(): string {
-  return msg("Notifications are blocked for Tempo. On Android: long-press the Tempo icon → App info → Notifications → allow. In Chrome: ⋮ → Settings → Site settings → Notifications → allow this site.");
+  return msg("Notifications are blocked for PlanMind. On Android: long-press the PlanMind icon → App info → Notifications → allow. In Chrome: ⋮ → Settings → Site settings → Notifications → allow this site.");
 }

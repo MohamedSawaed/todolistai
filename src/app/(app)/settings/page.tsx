@@ -178,8 +178,8 @@ export default function SettingsPage() {
               {t("Phone notifications")}{" "}{notifSupported ? "" : "(this browser blocks them on non-secure connections)"}
               <span className="block text-[12.5px] text-ink-2">
                 {pushAvailable
-                  ? t("Reminders arrive on this device even when Tempo is closed.")
-                  : t("Shown while Tempo is open. Use the online version for reminders when it's closed.")}
+                  ? t("Reminders arrive on this device even when PlanMind is closed.")
+                  : t("Shown while PlanMind is open. Use the online version for reminders when it's closed.")}
               </span>
             </span>
           </label>
@@ -190,7 +190,7 @@ export default function SettingsPage() {
               onClick={async () => {
                 const res = pushAvailable
                   ? await sendServerTestPush()
-                  : await enableNotifications().then((r) => (r.ok ? showSystemNotification("Tempo", t("Notifications are working."), "tempo-test") : r));
+                  : await enableNotifications().then((r) => (r.ok ? showSystemNotification("PlanMind", t("Notifications are working."), "tempo-test") : r));
                 if (res.ok) toast({ message: pushAvailable ? t("Sent from the server — check your notification bar. Try it with the app closed too.") : t("Test notification sent.") });
                 else toast({ message: t(res.reason), tone: "error" });
               }}
@@ -230,7 +230,7 @@ export default function SettingsPage() {
             />
             <span>
               {t("Evening review")}
-              <span className="block text-[12.5px] text-ink-2">{t("At the end of the day, Tempo asks whether you'd like to review unfinished activities. It never assumes something was missed.")}</span>
+              <span className="block text-[12.5px] text-ink-2">{t("At the end of the day, PlanMind asks whether you'd like to review unfinished activities. It never assumes something was missed.")}</span>
             </span>
           </label>
           {draft.notifications.eveningReview ? (

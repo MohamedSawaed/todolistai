@@ -29,10 +29,10 @@ export function notificationText(n: DueNotification): { title: string; body: str
 
   if (n.kind === "event") {
     const body = n.minutes === 0 || !n.at_time ? t("Starting now") : t("Starts {when}", { when: when(n.at_time) });
-    return { title: n.item_title ?? "Tempo", body: n.location ? `${body} · ${n.location}` : body };
+    return { title: n.item_title ?? "PlanMind", body: n.location ? `${body} · ${n.location}` : body };
   }
   if (n.kind === "task") {
-    return { title: n.item_title ?? "Tempo", body: n.at_time ? t("Task due {when}", { when: when(n.at_time) }) : t("Task due") };
+    return { title: n.item_title ?? "PlanMind", body: n.at_time ? t("Task due {when}", { when: when(n.at_time) }) : t("Task due") };
   }
   if (n.kind === "review") {
     return { title: t("Review your day?"), body: t("{count} from today not marked done — tap to review.", { count: countLabel(t, n.n_open ?? 0, "item") }) };

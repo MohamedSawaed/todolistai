@@ -13,7 +13,7 @@ export const POST = route(async ({ mode }) => {
   if (!data?.length) throw new HttpError(409, "This device isn't registered yet. Turn phone notifications off and on again.", { code: "no_devices" });
   const results = await Promise.all(
     data.map(async (t) => {
-      const r = await sendPush(t, { title: "Tempo", body: "Notifications are working — you'll get reminders even when the app is closed.", url: "/settings", tag: "tempo-test" });
+      const r = await sendPush(t, { title: "PlanMind", body: "Notifications are working — you'll get reminders even when the app is closed.", url: "/settings", tag: "tempo-test" });
       if (r.gone) await sb.from("push_subscriptions").delete().eq("endpoint", t.endpoint);
       return r;
     }),

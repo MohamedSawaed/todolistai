@@ -12,6 +12,7 @@ import { describeReminders } from "@/lib/reminders";
 import { countLabel, msg, type TFunction } from "@/lib/i18n";
 import type { Interval, Proposal } from "@/lib/types";
 import { CaptureCard } from "./capture/capture-card";
+import { ThinkingBlob } from "./blob";
 
 type ConfirmResponse = { status: "applied" | "conflict" | "stale"; proposal: Proposal; message?: string };
 
@@ -54,9 +55,12 @@ function ActionCard({ proposal, onUpdate }: { proposal: Proposal; onUpdate: (p: 
     }
   }
 
+  // the assistant's mood on the card: alert when there's a conflict, pleased once applied
+  const conflicted = pending && (p.kind === "create_event" || p.kind === "move_event") && p.conflicts.length > 0;
+  const mood = proposal.status === "applied" ? "success" : conflicted ? "conflict" : null;
   const header = (icon: React.ReactNode, label: string) => (
     <div className="mb-2.5 flex items-center gap-2 text-[11.5px] font-semibold tracking-wide text-ink-3 uppercase">
-      {icon}
+      {mood ? <ThinkingBlob state={mood} size={26} className="-my-1.5" /> : icon}
       {label}
       <StatusBadge proposal={proposal} expired={expired} />
     </div>

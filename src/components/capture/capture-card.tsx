@@ -13,11 +13,11 @@ import {
   Info,
   MapPin,
   Pencil,
-  ScanText,
   StickyNote,
   Users,
 } from "lucide-react";
 import { usePrefs, useToast } from "../providers";
+import { ThinkingBlob, type BlobState } from "../blob";
 import { Badge, Button, CheckCircle, Input, Segmented, Select, Textarea, cx } from "../ui";
 import { CATEGORY_META } from "../pickers";
 import { api, ApiError } from "@/lib/client/api";
@@ -145,12 +145,14 @@ export function CaptureCard({ proposal, onUpdate }: { proposal: Proposal; onUpda
   const fp: FmtPrefs = prefs;
   const sourceName = payload.source.label ?? (payload.source.type === "pdf" ? payload.source.fileName : null);
   const counts = summarize(outcomes);
+  const needsLook = open && remaining.some((i) => i.conflicts.length || i.duplicate || ["conflict", "duplicate", "failed"].includes(outcomes[i.id]?.status ?? ""));
+  const mood: BlobState = proposal.status === "applied" ? "success" : needsLook ? "conflict" : payload.items.length ? "responding" : "resting";
 
   return (
     <div className="animate-rise rounded-2xl border border-line bg-surface p-3.5 shadow-[var(--shadow-sm)]">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-[11.5px] font-semibold tracking-wide text-ink-3 uppercase">
-        <ScanText className="size-3.5 text-primary" />
-        {payload.items.length ? t("Found {count}", { count: countLabel(t, payload.items.length, "activity") }) : t("Nothing to schedule")}
+        <ThinkingBlob state={mood} size={28} className="-my-1.5" />
+        {proposal.status === "applied" && !counts.attention && !counts.failed ? t("All set.") : payload.items.length ? t("Found {count}", { count: countLabel(t, payload.items.length, "activity") }) : t("Nothing to schedule")}
         {proposal.status === "cancelled" ? <Badge className="ms-auto normal-case">{t("Discarded")}</Badge> : expired ? <Badge className="ms-auto normal-case">{t("Expired")}</Badge> : null}
       </div>
       {sourceName || payload.summary ? (

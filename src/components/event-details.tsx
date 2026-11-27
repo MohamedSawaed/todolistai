@@ -178,7 +178,7 @@ export function EventDetails() {
                     : t("Work session — completing it doesn't complete the task.")
                   : event.completedAt
                     ? t("Tap to mark it as not done.")
-                    : t("If it's not done by tomorrow, Tempo will ask whether to find a new time.")}
+                    : t("If it's not done by tomorrow, PlanMind will ask whether to find a new time.")}
               </p>
             </div>
           </button>

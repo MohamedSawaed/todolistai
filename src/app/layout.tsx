@@ -11,11 +11,11 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Tempo",
+  title: "PlanMind",
   description: "A personal planner that turns your plans into a schedule.",
-  applicationName: "Tempo",
+  applicationName: "PlanMind",
   // iPhone "Add to Home Screen": open full-screen with the app name
-  appleWebApp: { capable: true, title: "Tempo", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "PlanMind", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
@@ -34,7 +34,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     return (
       <html lang="en">
         <body style={{ fontFamily: "system-ui, sans-serif", maxWidth: 560, margin: "15vh auto", padding: 16, lineHeight: 1.5 }}>
-          <h1 style={{ fontSize: 22 }}>Tempo needs a database</h1>
+          <h1 style={{ fontSize: 22 }}>PlanMind needs a database</h1>
           <p>
             This deployment has no Supabase connection, so your data couldn&apos;t be saved. In your Vercel project settings, add{" "}
             <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>, then redeploy.

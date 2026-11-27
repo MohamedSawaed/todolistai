@@ -107,7 +107,7 @@ export async function postCapture<T>(form: FormData): Promise<T> {
 const SHARE_CACHE = "tempo-share";
 
 /**
- * Content shared to Tempo from another app (Android share sheet → Tempo). The service
+ * Content shared to PlanMind from another app (Android share sheet → PlanMind). The service
  * worker stores it in Cache Storage; if it wasn't running, the server page leaves the
  * text in sessionStorage. Returns null when nothing is waiting. Reading clears it.
  */

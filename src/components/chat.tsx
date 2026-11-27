@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, CalendarSearch, KeyRound, ListRestart, RotateCcw, Sparkles, SquarePen, Sun, CalendarPlus } from "lucide-react";
+import { ArrowUp, CalendarSearch, KeyRound, ListRestart, RotateCcw, SquarePen, Sun, CalendarPlus } from "lucide-react";
 import { useAppUI, usePrefs } from "./providers";
 import { Button, cx } from "./ui";
 import { ProposalCard } from "./proposal-card";
 import { api, ApiError } from "@/lib/client/api";
 import { msg } from "@/lib/i18n";
 import type { ChatMessageView, Proposal } from "@/lib/types";
+import { ThinkingBlob, type BlobState } from "./blob";
 import { AttachButton, CapturePreview, CaptureProgress } from "./capture/capture-composer";
 import { buildCaptureForm, draftFromFiles, postCapture, type CaptureDraft } from "@/lib/client/capture";
 
@@ -167,9 +168,7 @@ export function ChatView({ compact = false, incoming = null }: { compact?: boole
             </div>
           ) : empty ? (
             <div className="flex animate-fade-in flex-col items-center px-2 pt-6 pb-2 text-center">
-              <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-primary-soft text-primary">
-                <Sparkles className="size-6" />
-              </div>
+              <ThinkingBlob size={compact ? 64 : 84} className="mb-3" />
               <h2 className="text-[19px] font-semibold tracking-tight">{firstName ? t("How can I help, {name}?", { name: firstName }) : t("How can I help?")}</h2>
               <p className="mt-1.5 max-w-sm text-[13.5px] text-ink-2">
                 {t("Tell me what you need to do. I'll check your real calendar, find time, and prepare changes for you to confirm.")}
@@ -193,16 +192,12 @@ export function ChatView({ compact = false, incoming = null }: { compact?: boole
               </div>
             </div>
           ) : (
-            thread.messages.map((m) => <Message key={m.id} m={m} onUpdate={updateProposal} />)
+            thread.messages.map((m, i) => <Message key={m.id} m={m} onUpdate={updateProposal} latest={i === thread.messages.length - 1} />)
           )}
           {capturing ? <CaptureProgress /> : null}
           {sending ? (
-            <div className="flex items-center gap-2 text-[13px] text-ink-3" aria-live="polite">
-              <span className="flex gap-1 rounded-2xl rounded-ss-md bg-surface-2 px-3.5 py-3" aria-label={t("Assistant is thinking")}>
-                {[0, 1, 2].map((i) => (
-                  <span key={i} className="typing-dot size-1.5 rounded-full bg-ink-3" style={{ animationDelay: `${i * 0.15}s` }} />
-                ))}
-              </span>
+            <div className="flex animate-rise items-center gap-2 text-[13px] text-ink-2" aria-live="polite">
+              <ThinkingBlob state="thinking" size={40} label={t("Assistant is thinking")} />
               {t("Checking your calendar…")}
             </div>
           ) : null}
@@ -226,7 +221,7 @@ export function ChatView({ compact = false, incoming = null }: { compact?: boole
             <div className="mb-2.5 flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning-soft px-3 py-2.5 text-[12.5px] text-ink">
               <KeyRound className="mt-0.5 size-4 shrink-0 text-warning" />
               <span>
-                <b>{t("AI setup needed.")}</b> {t("The AI key isn't set on the server yet. Everything else in Tempo works without it.")}
+                <b>{t("AI setup needed.")}</b> {t("The AI key isn't set on the server yet. Everything else in PlanMind works without it.")}
               </span>
             </div>
           ) : null}
@@ -316,7 +311,21 @@ export function ChatView({ compact = false, incoming = null }: { compact?: boole
   );
 }
 
-function Message({ m, onUpdate }: { m: ChatMessageView; onUpdate: (p: Proposal) => void }) {
+/** How the assistant feels about its latest message: alert on a conflict, pleased once it's done. */
+function moodOf(m: ChatMessageView): BlobState {
+  const open = m.proposals.filter((p) => p.status === "pending");
+  const conflict = open.some((p) => {
+    const x = p.payload;
+    if (x.kind === "create_event" || x.kind === "move_event") return x.conflicts.length > 0;
+    if (x.kind === "capture") return x.items.some((i) => i.conflicts.length || i.duplicate || ["conflict", "duplicate"].includes(x.outcomes[i.id]?.status ?? ""));
+    return false;
+  });
+  if (conflict) return "conflict";
+  if (m.proposals.length && m.proposals.every((p) => p.status === "applied")) return "success";
+  return "responding";
+}
+
+function Message({ m, onUpdate, latest }: { m: ChatMessageView; onUpdate: (p: Proposal) => void; latest: boolean }) {
   if (m.role === "user") {
     return (
       <div className="flex animate-rise justify-end">
@@ -327,9 +336,7 @@ function Message({ m, onUpdate }: { m: ChatMessageView; onUpdate: (p: Proposal) 
   return (
     <div className="flex animate-rise flex-col gap-2.5">
       <div className="flex items-start gap-2.5">
-        <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">
-          <Sparkles className="size-3.5" />
-        </span>
+        <ThinkingBlob state={latest ? moodOf(m) : "idle"} still={!latest} size={latest ? 30 : 26} className="-mt-0.5" />
         <p className="min-w-0 pt-0.5 text-[14px] leading-relaxed whitespace-pre-wrap">{m.text}</p>
       </div>
       {m.proposals.length ? (

@@ -1,7 +1,8 @@
 "use client";
 import { useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, RefreshCw, Sparkles } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
+import { ThinkingBlob } from "./blob";
 import { usePrefs } from "./providers";
 import { Button, Skeleton, cx } from "./ui";
 import { api } from "@/lib/client/api";
@@ -75,7 +76,7 @@ export function DailyBriefing() {
   return (
     <section aria-label={t("Daily briefing")} className="mt-5 rounded-2xl border border-primary/15 bg-primary-soft/40 px-3.5 py-2.5">
       <div className="flex items-center gap-2.5">
-        <Sparkles className="size-4 shrink-0 text-primary" aria-hidden />
+        <ThinkingBlob state={loading ? "thinking" : q.isError ? "idle" : "responding"} size={30} className="-my-1" />
         <div className="min-w-0 flex-1">
           {loading ? (
             <Skeleton className="h-4 w-3/4" />

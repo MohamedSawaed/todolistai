@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   await Promise.all(
     due.map(async (n) => {
       // 0004+ returns facts to phrase in the user's language; older databases return ready text
-      const text = n.kind ? notificationText(n) : { title: n.title ?? "Tempo", body: n.body ?? "" };
+      const text = n.kind ? notificationText(n) : { title: n.title ?? "PlanMind", body: n.body ?? "" };
       const r = await sendPush(n, { ...text, url: n.url, tag: n.tag });
       if (r.ok) sent++;
       if (r.gone) await sb.rpc("remove_push_subscription", { p_secret: secret, p_endpoint: n.endpoint });

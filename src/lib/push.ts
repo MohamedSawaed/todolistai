@@ -3,7 +3,7 @@ import * as webpush from "web-push";
 
 /**
  * Web Push (works on Android/desktop even when the app is closed; on iPhone once
- * Tempo is added to the Home Screen). Keys come from the environment:
+ * PlanMind is added to the Home Screen). Keys come from the environment:
  *   NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
  */
 export function pushConfigured(): boolean {

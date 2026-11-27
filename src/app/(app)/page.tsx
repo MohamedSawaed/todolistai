@@ -5,6 +5,7 @@ import { DateTime } from "luxon";
 import { ArrowUp, CalendarPlus, CalendarSearch, CheckSquare, ListRestart, MapPin, MoreHorizontal, Plus, Sparkles, StickyNote, Sun } from "lucide-react";
 import { useAppUI, usePrefs } from "@/components/providers";
 import { Button, CheckCircle, EmptyState, Skeleton, cx } from "@/components/ui";
+import { ThinkingBlob } from "@/components/blob";
 import { WeekStrip, weekStart } from "@/components/week-strip";
 import { NotificationBell } from "@/components/notifications";
 import { DailyBriefing } from "@/components/briefing";
@@ -167,7 +168,7 @@ export default function TodayPage() {
           </div>
         ) : dayEvents.length === 0 ? (
           <EmptyState
-            icon={<Sun className="size-6" />}
+            art={<ThinkingBlob state="resting" size={72} />}
             title={isToday ? t("Your schedule is clear today.") : t("Nothing scheduled this day.")}
             body={t("Add something yourself, or tell the assistant what you need to get done.")}
             actions={
