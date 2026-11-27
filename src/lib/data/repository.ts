@@ -47,6 +47,7 @@ export interface EventUpdate {
   location?: string | null;
   reminders?: number[];
   completedAt?: string | null;
+  followUpDismissedAt?: string | null;
 }
 
 export type TaskUpdate = Partial<Omit<Task, "id" | "userId" | "createdAt" | "updatedAt" | "subtasks">> & {

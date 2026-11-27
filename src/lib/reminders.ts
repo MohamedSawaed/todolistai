@@ -5,49 +5,107 @@
  */
 import type { Category, Preferences, ReminderRule } from "./types";
 
+/** Bump when DEFAULT_REMINDER_RULES changes; saved settings are upgraded on load. */
+export const REMINDER_RULES_VERSION = 2;
+
+// Order matters: "Study for the math exam" is a study session (15 min), "Math exam" is the exam itself.
 export const DEFAULT_REMINDER_RULES: ReminderRule[] = [
+  {
+    id: "study",
+    label: "Reading & studying",
+    keywords: [
+      "read", "reading", "study", "studying", "homework", "revise", "revision", "review", "lecture", "class", "course", "practice",
+      "לקרוא", "קריאה", "ללמוד", "לימוד", "שיעורי בית", "הרצאה", "قراءة", "دراسة", "مذاكرة", "واجب", "محاضرة",
+    ],
+    categories: [],
+    reminders: [15],
+  },
   {
     id: "calls",
     label: "Calls",
-    keywords: ["call", "calls", "calling", "phone", "ring", "video call", "zoom", "facetime", "whatsapp"],
+    keywords: [
+      "call", "calls", "calling", "phone", "ring", "video call", "zoom", "facetime", "whatsapp",
+      "שיחה", "להתקשר", "טלפון", "اتصال", "مكالمة", "اتصل",
+    ],
     categories: [],
     reminders: [10],
   },
   {
-    id: "appointments",
-    label: "Appointments",
+    id: "exams",
+    label: "Tests & exams",
     keywords: [
-      "appointment", "appt", "doctor", "dentist", "dental", "clinic", "hospital", "checkup", "check-up",
-      "therapy", "therapist", "physio", "interview", "flight", "exam", "haircut", "barber", "lawyer",
-      "bank", "vet", "optician", "pharmacy", "visa", "embassy",
+      "exam", "exams", "test", "tests", "quiz", "midterm", "final exam", "finals", "bagrut", "psychometric",
+      "מבחן", "מבחנים", "בחינה", "בוחן", "בגרות", "פסיכומטרי", "امتحان", "اختبار", "فحص نهائي",
     ],
     categories: [],
-    reminders: [1440, 120],
+    reminders: [2880, 1440, 60],
+  },
+  {
+    id: "appointments",
+    label: "Doctor & appointments",
+    keywords: [
+      "appointment", "appt", "doctor", "dr", "dentist", "dental", "clinic", "hospital", "checkup", "check-up",
+      "therapy", "therapist", "physio", "optician", "vet", "lawyer", "bank", "haircut", "barber", "interview",
+      "embassy", "visa", "תור", "רופא", "רופאה", "רופא שיניים", "מרפאה", "בית חולים", "ראיון",
+      "موعد", "طبيب", "دكتور", "عيادة", "مستشفى", "مقابلة",
+    ],
+    categories: [],
+    reminders: [1440, 60],
+  },
+  {
+    id: "travel",
+    label: "Flights & travel",
+    keywords: ["flight", "airport", "train", "trip", "טיסה", "שדה תעופה", "רכבת", "رحلة", "مطار", "طيران"],
+    categories: [],
+    reminders: [1440, 180],
   },
   {
     id: "meetings",
     label: "Meetings",
-    keywords: ["meeting", "meet", "sync", "standup", "stand-up", "1:1", "one-on-one", "presentation"],
+    keywords: ["meeting", "meet", "sync", "standup", "stand-up", "1:1", "one-on-one", "presentation", "פגישה", "اجتماع", "لقاء"],
     categories: [],
     reminders: [15],
   },
   {
     id: "deadlines",
     label: "Deadlines & important",
-    keywords: ["deadline", "due", "submit", "submission"],
+    keywords: ["deadline", "due", "submit", "submission", "הגשה", "דדליין", "تسليم", "موعد نهائي"],
     categories: ["important"],
     reminders: [1440, 60],
   },
 ];
 
+/** The defaults shipped before version 2, used to detect untouched settings. */
+const V1_RULE_SIGNATURE = "calls:10|appointments:1440,120|meetings:15|deadlines:1440,60";
+
+/**
+ * Upgrade saved rules to the current defaults. Untouched v1 defaults are replaced
+ * entirely; customized rules are kept and the new built-in rules are added in front.
+ */
+export function upgradeReminderRules(rules: ReminderRule[], version: number): ReminderRule[] {
+  if (version >= REMINDER_RULES_VERSION) return rules;
+  const signature = rules.map((r) => `${r.id}:${r.reminders.join(",")}`).join("|");
+  if (signature === V1_RULE_SIGNATURE || rules.length === 0) return DEFAULT_REMINDER_RULES;
+  const have = new Set(rules.map((r) => r.id));
+  const added = DEFAULT_REMINDER_RULES.filter((r) => !have.has(r.id) && ["study", "exams", "travel"].includes(r.id));
+  return [...added, ...rules].slice(0, 20);
+}
+
 function escape(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Whole-word, case-insensitive match that also works for Arabic/Hebrew text. */
+const LATIN = /^[\p{Script=Latin}\p{N}\s:'-]+$/u;
+
+/**
+ * Case-insensitive keyword match. Latin keywords match whole words ("recall" isn't "call").
+ * Hebrew/Arabic keywords match inside words too, since those languages attach prefixes
+ * (e.g. "למבחן", "والامتحان").
+ */
 export function titleHasKeyword(title: string, keyword: string): boolean {
   const k = keyword.trim();
   if (!k) return false;
+  if (!LATIN.test(k)) return title.toLocaleLowerCase().includes(k.toLocaleLowerCase());
   return new RegExp(`(^|[^\\p{L}\\p{N}])${escape(k)}($|[^\\p{L}\\p{N}])`, "iu").test(title);
 }
 

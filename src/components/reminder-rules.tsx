@@ -45,7 +45,7 @@ export function ReminderRulesEditor({ rules, onChange }: { rules: ReminderRule[]
                   <Input
                     className="mt-1"
                     defaultValue={r.keywords.join(", ")}
-                    onBlur={(e) => update(r.id, { keywords: e.target.value.split(",").map((k) => k.trim()).filter(Boolean).slice(0, 30) })}
+                    onBlur={(e) => update(r.id, { keywords: e.target.value.split(",").map((k) => k.trim()).filter(Boolean).slice(0, 80) })}
                     placeholder="call, phone, zoom"
                   />
                 </label>

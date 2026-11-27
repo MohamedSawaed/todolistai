@@ -3,13 +3,15 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { ArrowUp, CalendarPlus, CalendarSearch, CheckSquare, ListRestart, MapPin, MoreHorizontal, Plus, Sparkles, StickyNote, Sun } from "lucide-react";
-import { useAppUI, usePrefs, useToast } from "@/components/providers";
+import { useAppUI, usePrefs } from "@/components/providers";
 import { Button, CheckCircle, EmptyState, Skeleton, cx } from "@/components/ui";
 import { WeekStrip, weekStart } from "@/components/week-strip";
 import { NotificationBell } from "@/components/notifications";
+import { DailyBriefing } from "@/components/briefing";
+import { FollowUps } from "@/components/follow-ups";
 import { CATEGORY_META, PRIORITY_META } from "@/components/pickers";
-import { useEvents, useNotes, useNow, useTaskMutations, useTasks, useInvalidateAll } from "@/lib/client/hooks";
-import { api } from "@/lib/client/api";
+import { useEvents, useNotes, useNow, useTaskMutations, useTasks } from "@/lib/client/hooks";
+import { useEventActions } from "@/lib/client/event-actions";
 import { fmtDuration, fmtRelativeDay, fmtTime, fmtTimeRange, greetingKey, todayLocal } from "@/lib/client/format";
 import { intlLocale } from "@/lib/i18n";
 import type { CalendarEvent } from "@/lib/types";
@@ -86,6 +88,9 @@ export default function TodayPage() {
           </Link>
         </div>
       </header>
+
+      <DailyBriefing />
+      <FollowUps />
 
       {/* AI quick composer */}
       <section className="mt-6" aria-label="Ask the assistant">
@@ -245,8 +250,7 @@ function defaultStartFor(date: string, zone: string): string {
 function ActivityCard({ event }: { event: CalendarEvent }) {
   const { prefs } = usePrefs();
   const { openEvent } = useAppUI();
-  const toast = useToast();
-  const invalidate = useInvalidateAll();
+  const { setDone } = useEventActions();
   const minutes = Math.round((Date.parse(event.endAt) - Date.parse(event.startAt)) / 60000);
   const now = useNow();
   const live = Date.parse(event.startAt) <= now && now < Date.parse(event.endAt);
@@ -254,14 +258,6 @@ function ActivityCard({ event }: { event: CalendarEvent }) {
   const meta = CATEGORY_META[event.category];
   const done = !!event.completedAt;
 
-  const toggle = async (v: boolean) => {
-    try {
-      await api(`/api/events/${event.id}`, { method: "PATCH", body: { completed: v, expectedVersion: event.version } });
-      await invalidate();
-    } catch (e) {
-      toast({ message: e instanceof Error ? e.message : "Couldn't update", tone: "error" });
-    }
-  };
 
   return (
     <li className="flex animate-rise gap-3 sm:gap-4">
@@ -277,14 +273,16 @@ function ActivityCard({ event }: { event: CalendarEvent }) {
         className={cx(
           "group relative flex min-w-0 flex-1 cursor-pointer items-start gap-3 overflow-hidden rounded-2xl border bg-surface p-3.5 ps-4 text-start transition-all hover:-translate-y-px hover:shadow-soft",
           live ? "border-[var(--c)]/50 ring-4 ring-[var(--c)]/10" : "border-line",
-          (past || done) && "opacity-70",
+          done && "opacity-70",
         )}
       >
         <span className="absolute inset-y-0 start-0 w-1 bg-[var(--c)]" aria-hidden />
-        {event.taskId ? <CheckCircle checked={done} onChange={toggle} label={`Mark ${event.title} done`} category={event.category} /> : null}
+        <span className="pt-0.5">
+          <CheckCircle checked={done} onChange={(v) => void setDone(event, v)} label={`Mark ${event.title} ${done ? "not done" : "done"}`} category={event.category} />
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className={cx("truncate text-[14.5px] font-semibold", done && "text-ink-3 line-through")}>{event.title}</p>
+            <p className={cx("text-[14.5px] leading-snug font-semibold break-words transition-colors", done && "text-ink-3 line-through")}>{event.title}</p>
             {live ? <span className="rounded-full bg-[var(--c-soft)] px-1.5 py-px text-[10.5px] font-semibold text-[var(--c-ink)] uppercase">Now</span> : null}
           </div>
           <p className="tabular mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-ink-2">

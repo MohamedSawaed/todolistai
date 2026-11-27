@@ -25,7 +25,8 @@ Understanding requests
 - Notes are information, not appointments: use create_note_proposal.
 
 Reminders
-- Reminders are set automatically from the user's reminder rules (listed in the context block), e.g. calls 10 minutes before, appointments a day and 2 hours before. Leave \`reminders\` out of create_event_proposal unless the user asks for specific ones ("remind me 30 minutes before" → [30]; "the day before and an hour before" → [1440, 60]).
+- Reminders depend on what the activity is. The user's reminder rules (in the context block) decide them, e.g. reading/study 15 minutes before, calls 10 minutes before, tests/exams 2 days + 1 day + 1 hour before, doctor/appointments 1 day + 1 hour before. Write titles so the right rule matches (an exam titled "Math Exam", a study session "Study for Math Exam").
+- Leave \`reminders\` out of create_event_proposal when a rule clearly fits. Set them yourself only when the user asks for specific ones ("remind me 30 minutes before" → [30]) or when no rule fits and the activity obviously needs more notice than the default (e.g. a wedding or a long trip → [10080, 1440]).
 - "Remind me to call Sam at 3pm" → a short event titled "Call Sam" (the calls rule adds its reminder). "Remind me to call Sam on Sunday" with no time → ask for a time, or create a task due that day if they don't need a specific time.
 - To change reminders on an existing event, find it, then use propose_reminder_change.
 - Mention the reminders briefly when you propose an event ("I'll remind you a day before and 2 hours before").

@@ -203,6 +203,55 @@ export function suggestAlternatives(opts: {
   return out;
 }
 
+/**
+ * New times for something that didn't happen: the same time of day on the next days
+ * (people keep routines), then the earliest free slot. Never in the past, never overlapping.
+ */
+export function suggestReschedule(opts: {
+  event: Busy;
+  events: Busy[];
+  zone: string;
+  window: TimeWindow;
+  now: string;
+  bufferMinutes?: number;
+  max?: number;
+}): Slot[] {
+  const { event, zone } = opts;
+  const max = opts.max ?? 3;
+  const duration = Math.round((ms(event.endAt) - ms(event.startAt)) / 60000);
+  const others = opts.events.filter((e) => e.id !== event.id);
+  const now = DateTime.fromISO(opts.now, { zone: "utc" }).setZone(zone);
+  const original = DateTime.fromISO(event.startAt, { zone: "utc" }).setZone(zone);
+  const out: Slot[] = [];
+  const taken = (s: Interval) => out.some((o) => overlaps(o, s));
+
+  for (let i = 0; i <= 7 && out.length < max - 1; i++) {
+    const day = now.plus({ days: i });
+    const start = day.set({ hour: original.hour, minute: original.minute, second: 0, millisecond: 0 });
+    if (start <= now) continue;
+    const slot = { start: start.toUTC().toISO()!, end: start.plus({ minutes: duration }).toUTC().toISO()! };
+    if (!findConflicts(slot, others, { bufferMinutes: opts.bufferMinutes }).length && !taken(slot)) {
+      out.push({ ...slot, reason: `Same time ${i === 0 ? "today" : i === 1 ? "tomorrow" : `on ${start.toFormat("cccc")}`}` });
+    }
+  }
+  const earliest = findFreeSlots({
+    events: others,
+    fromDate: now.toISODate()!,
+    toDate: now.plus({ days: 7 }).toISODate()!,
+    durationMinutes: duration,
+    zone,
+    window: opts.window,
+    bufferMinutes: opts.bufferMinutes,
+    notBefore: opts.now,
+    maxResults: 10,
+  });
+  for (const s of earliest) {
+    if (out.length >= max) break;
+    if (!taken(s)) out.push({ ...s, reason: "Earliest free time" });
+  }
+  return out.sort((a, b) => ms(a.start) - ms(b.start));
+}
+
 /** Total free minutes inside a window on a date. */
 export function freeMinutesOnDate(opts: { events: Busy[]; date: string; zone: string; window: TimeWindow; notBefore?: string }): number {
   const win = windowOnDate(opts.date, opts.window, opts.zone);

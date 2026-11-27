@@ -1,6 +1,7 @@
 "use client";
 import { useMemo } from "react";
 import { DateTime } from "luxon";
+import { Check } from "lucide-react";
 import { usePrefs } from "../providers";
 import { cx } from "../ui";
 import { fmtTime } from "@/lib/client/format";
@@ -13,7 +14,19 @@ export function monthGrid(anchor: string, weekStartsOn: 1 | 7) {
   return Array.from({ length: 42 }, (_, i) => start.plus({ days: i }).toISODate()!);
 }
 
-export function MonthView({ anchor, events, onPickDate, onOpen }: { anchor: string; events: CalendarEvent[]; onPickDate: (d: string) => void; onOpen: (e: CalendarEvent) => void }) {
+export function MonthView({
+  anchor,
+  events,
+  selected,
+  onSelect,
+  onOpen,
+}: {
+  anchor: string;
+  events: CalendarEvent[];
+  selected: string;
+  onSelect: (d: string) => void;
+  onOpen: (e: CalendarEvent) => void;
+}) {
   const { prefs } = usePrefs();
   const zone = prefs.timezone;
   const cells = monthGrid(anchor, prefs.weekStartsOn);
@@ -22,7 +35,7 @@ export function MonthView({ anchor, events, onPickDate, onOpen }: { anchor: stri
 
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
-    for (const e of events) {
+    for (const e of [...events].sort((a, b) => a.startAt.localeCompare(b.startAt))) {
       // an event appears on every local day it touches
       let d = DateTime.fromISO(e.startAt).setZone(zone).startOf("day");
       const last = DateTime.fromMillis(Date.parse(e.endAt) - 1).setZone(zone).startOf("day");
@@ -37,10 +50,10 @@ export function MonthView({ anchor, events, onPickDate, onOpen }: { anchor: stri
   const weekdays = cells.slice(0, 7).map((d) => DateTime.fromISO(d).setLocale(intlLocale(prefs.locale)).toFormat("ccc"));
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-line bg-surface">
-      <div className="grid grid-cols-7 border-b border-line">
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-line bg-surface lg:h-full">
+      <div className="grid grid-cols-7 border-b border-line bg-surface-2/40">
         {weekdays.map((w) => (
-          <div key={w} className="py-2 text-center text-[10.5px] font-semibold tracking-wider text-ink-3 uppercase">
+          <div key={w} className="py-2 text-center text-[11px] font-semibold tracking-wider text-ink-3 uppercase">
             {w}
           </div>
         ))}
@@ -50,31 +63,39 @@ export function MonthView({ anchor, events, onPickDate, onOpen }: { anchor: stri
           const d = DateTime.fromISO(iso);
           const list = byDay.get(iso) ?? [];
           const inMonth = d.month === month;
+          const isSel = iso === selected;
           return (
-            <button
+            <div
               key={iso}
-              onClick={() => onPickDate(iso)}
-              aria-label={`${d.toFormat("cccc, LLLL d")}, ${list.length} events`}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(iso)}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onSelect(iso))}
+              aria-pressed={isSel}
+              aria-label={`${d.toFormat("cccc, LLLL d")}, ${list.length} ${list.length === 1 ? "event" : "events"}`}
               className={cx(
-                "flex min-h-[72px] min-w-0 flex-col items-stretch gap-0.5 border-e border-b border-line/70 p-1 text-start transition-colors hover:bg-surface-2 sm:min-h-[104px] sm:p-1.5",
+                "flex min-h-[64px] min-w-0 cursor-pointer flex-col gap-1 overflow-hidden border-e border-b border-line/70 p-1 text-start transition-colors sm:min-h-[104px] sm:p-1.5 lg:min-h-0",
                 !inMonth && "bg-surface-2/50",
+                isSel ? "bg-primary-soft/60 ring-2 ring-primary ring-inset" : "hover:bg-surface-2",
               )}
             >
               <span
                 className={cx(
-                  "tabular mb-0.5 grid size-6 place-items-center self-start rounded-full text-[12.5px] font-medium sm:self-auto",
+                  "tabular grid size-7 place-items-center self-center rounded-full text-[13px] font-semibold sm:self-start",
                   iso === today ? "bg-primary text-white" : inMonth ? "text-ink" : "text-ink-3",
                 )}
               >
                 {d.day}
               </span>
-              {/* mobile: dots; desktop: chips */}
-              <span className="flex flex-wrap gap-0.5 sm:hidden">
-                {list.slice(0, 4).map((e) => (
-                  <span key={e.id} data-cat={e.category} className="size-1.5 rounded-full bg-[var(--c)]" />
+              {/* phones: one colored bar per event (up to 3) */}
+              <span className="flex flex-col gap-0.5 sm:hidden">
+                {list.slice(0, 3).map((e) => (
+                  <span key={e.id} data-cat={e.category} className={cx("h-1.5 rounded-full bg-[var(--c)]", e.completedAt && "opacity-40")} />
                 ))}
+                {list.length > 3 ? <span className="text-center text-[10px] leading-none text-ink-3">+{list.length - 3}</span> : null}
               </span>
-              <span className="hidden min-w-0 flex-col gap-0.5 sm:flex">
+              {/* larger screens: readable chips */}
+              <span className="hidden min-w-0 flex-col gap-1 sm:flex">
                 {list.slice(0, 3).map((e) => (
                   <span
                     key={e.id}
@@ -85,15 +106,22 @@ export function MonthView({ anchor, events, onPickDate, onOpen }: { anchor: stri
                       ev.stopPropagation();
                       onOpen(e);
                     }}
-                    className="flex min-w-0 items-center gap-1 rounded-md bg-[var(--c-soft)] px-1.5 py-px text-[11px] text-[var(--c-ink)] hover:brightness-95"
+                    title={`${fmtTime(e.startAt, prefs)} ${e.title}`}
+                    className={cx(
+                      "block min-w-0 rounded-md border-s-[3px] border-[var(--c)] bg-[var(--c-soft)] px-1.5 py-0.5 text-[11.5px] leading-[14px] hover:brightness-95",
+                      e.completedAt && "opacity-55",
+                    )}
                   >
-                    <span className="tabular shrink-0 opacity-75">{fmtTime(e.startAt, prefs)}</span>
-                    <span className="truncate font-medium">{e.title}</span>
+                    <span className="tabular me-1 text-[10.5px] text-[var(--c-ink)]">{fmtTime(e.startAt, prefs)}</span>
+                    {e.completedAt ? <Check className="me-0.5 inline size-3 text-[var(--c-ink)]" aria-hidden /> : null}
+                    <span className={cx("font-medium break-words text-ink", e.completedAt && "line-through")} style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden" }}>
+                      {e.title}
+                    </span>
                   </span>
                 ))}
-                {list.length > 3 ? <span className="px-1.5 text-[11px] text-ink-3">+{list.length - 3} more</span> : null}
+                {list.length > 3 ? <span className="px-1 text-[11px] font-medium text-ink-2">+{list.length - 3} more</span> : null}
               </span>
-            </button>
+            </div>
           );
         })}
       </div>

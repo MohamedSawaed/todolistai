@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { CATEGORIES, PRIORITIES, type Preferences } from "./types";
 import { isValidZone } from "./scheduling/time";
-import { DEFAULT_REMINDER_RULES } from "./reminders";
+import { DEFAULT_REMINDER_RULES, REMINDER_RULES_VERSION, upgradeReminderRules } from "./reminders";
 
 export const zDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 export const zTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:mm (24h)");
@@ -49,6 +49,8 @@ export const eventPatchSchema = z.object({
   location: z.string().max(300).nullable().optional(),
   reminders: zReminders.optional(),
   completed: z.boolean().optional(),
+  /** "Didn't happen / not needed": stop asking about it. */
+  followUpDismissed: z.boolean().optional(),
   expectedVersion: z.number().int().optional(),
   allowOverlap: z.boolean().optional(),
 });
@@ -113,13 +115,20 @@ export const preferencesSchema = z.object({
   }),
   defaultView: z.enum(["day", "week", "month"]),
   bufferMinutes: z.number().int().min(0).max(120),
-  notifications: z.object({ inApp: z.boolean(), browser: z.boolean(), defaultReminder: zReminder }),
+  notifications: z.object({
+    inApp: z.boolean(),
+    browser: z.boolean(),
+    defaultReminder: zReminder,
+    morningBriefing: z.boolean(),
+    briefingTime: zTime,
+  }),
+  reminderRulesVersion: z.number().int().min(0),
   reminderRules: z
     .array(
       z.object({
         id: z.string().min(1).max(40),
         label: z.string().trim().min(1).max(40),
-        keywords: z.array(z.string().trim().min(1).max(40)).max(30),
+        keywords: z.array(z.string().trim().min(1).max(40)).max(80),
         categories: z.array(zCategory).max(5),
         reminders: zReminders,
       }),
@@ -146,8 +155,9 @@ export function defaultPreferences(timezone = "UTC"): Preferences {
     defaultDurations: { event: 60, task: 30, study: 60, workout: 60 },
     defaultView: "week",
     bufferMinutes: 0,
-    notifications: { inApp: true, browser: false, defaultReminder: 15 },
+    notifications: { inApp: true, browser: false, defaultReminder: 15, morningBriefing: true, briefingTime: "08:00" },
     reminderRules: DEFAULT_REMINDER_RULES,
+    reminderRulesVersion: REMINDER_RULES_VERSION,
     theme: "system",
     ai: { preferredFocus: "any", autoSuggestSessions: true },
     onboarded: false,
@@ -158,7 +168,26 @@ export function defaultPreferences(timezone = "UTC"): Preferences {
 export function normalizePreferences(raw: unknown, fallbackZone = "UTC"): Preferences {
   const base = defaultPreferences(fallbackZone);
   if (!raw || typeof raw !== "object") return base;
-  const merged = { ...base, ...(raw as Partial<Preferences>) };
+  const r = raw as Partial<Preferences>;
+  // merge nested objects too, so settings saved by an older version keep their values
+  const merged: Preferences = {
+    ...base,
+    ...r,
+    workHours: { ...base.workHours, ...r.workHours },
+    defaultDurations: { ...base.defaultDurations, ...r.defaultDurations },
+    notifications: { ...base.notifications, ...r.notifications },
+    ai: { ...base.ai, ...r.ai },
+  };
+  const upgraded = upgradeReminderRules(merged.reminderRules, r.reminderRulesVersion ?? 1);
+  merged.reminderRules = upgraded;
+  merged.reminderRulesVersion = REMINDER_RULES_VERSION;
   const parsed = preferencesSchema.safeParse(merged);
-  return parsed.success ? (parsed.data as Preferences) : base;
+  if (parsed.success) return parsed.data as Preferences;
+  // keep whatever fields are valid rather than resetting everything
+  const fixed = { ...base } as Record<string, unknown>;
+  for (const key of Object.keys(base) as (keyof Preferences)[]) {
+    const one = preferencesSchema.shape[key].safeParse(merged[key]);
+    if (one.success) fixed[key] = one.data;
+  }
+  return fixed as unknown as Preferences;
 }

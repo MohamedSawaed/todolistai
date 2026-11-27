@@ -48,6 +48,7 @@ export class LocalStore {
       // upgrade events saved before multiple reminders existed
       for (const e of this.db.events as (CalendarEvent & { reminderMinutes?: number | null })[]) {
         if (!Array.isArray(e.reminders)) e.reminders = e.reminderMinutes == null ? [] : [e.reminderMinutes];
+        if (e.followUpDismissedAt === undefined) e.followUpDismissedAt = null;
         delete e.reminderMinutes;
       }
     } catch (e) {
@@ -147,6 +148,7 @@ export class LocalRepository implements Repository {
         startAt: new Date(input.startAt).toISOString(),
         endAt: new Date(input.endAt).toISOString(),
         completedAt: null,
+        followUpDismissedAt: null,
         version: 1,
         createdAt: ts,
         updatedAt: ts,

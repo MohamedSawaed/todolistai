@@ -1,11 +1,12 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { DateTime } from "luxon";
 import { AlertTriangle, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useAppUI, usePrefs, useToast } from "@/components/providers";
 import { Button, Segmented, Sheet } from "@/components/ui";
 import { TimeGrid } from "@/components/calendar/time-grid";
 import { MonthView, monthGrid } from "@/components/calendar/month-view";
+import { AgendaList } from "@/components/calendar/agenda";
 import { weekStart } from "@/components/week-strip";
 import { useEvents, useInvalidateAll } from "@/lib/client/hooks";
 import { api, ApiError } from "@/lib/client/api";
@@ -14,6 +15,12 @@ import { intlLocale } from "@/lib/i18n";
 import type { CalendarEvent, ConflictInfo, Slot } from "@/lib/types";
 
 type View = "day" | "week" | "month";
+
+const subscribePhone = (cb: () => void) => {
+  const mq = window.matchMedia("(max-width: 639px)");
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+};
 
 interface PendingMove {
   event: CalendarEvent;
@@ -35,10 +42,9 @@ export default function CalendarPage() {
   const [move, setMove] = useState<PendingMove | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // compact screens start on the day view
-  useEffect(() => {
-    if (window.matchMedia("(max-width: 639px)").matches && prefs.defaultView === "week") setView("day");
-  }, [prefs.defaultView]);
+  // phones show the week as a readable list instead of seven narrow columns
+  const isPhone = useSyncExternalStore(subscribePhone, () => window.matchMedia("(max-width: 639px)").matches, () => false);
+  const addOn = (date: string) => ui.openComposer({ kind: "event", start: DateTime.fromISO(`${date}T09:00`, { zone }).toUTC().toISO()! });
 
   const days = useMemo(() => {
     if (view === "day") return [anchor];
@@ -175,15 +181,19 @@ export default function CalendarPage() {
       ) : null}
 
       {view === "month" ? (
-        <MonthView
-          anchor={anchor}
-          events={events.data ?? []}
-          onOpen={ui.openEvent}
-          onPickDate={(d) => {
-            setAnchor(d);
-            setView("day");
-          }}
-        />
+        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-1 lg:gap-4 lg:overflow-hidden">
+          <MonthView anchor={anchor} events={events.data ?? []} selected={anchor} onSelect={setAnchor} onOpen={ui.openEvent} />
+          <div className="scrollbar-thin mt-4 lg:mt-0 lg:overflow-y-auto">
+            <AgendaList days={[anchor]} events={events.data ?? []} onOpen={ui.openEvent} onAdd={addOn} />
+            <Button variant="ghost" size="sm" className="mt-2" onClick={() => setView("day")}>
+              Open in day view
+            </Button>
+          </div>
+        </div>
+      ) : view === "week" && isPhone ? (
+        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pb-4">
+          <AgendaList days={days} events={events.data ?? []} onOpen={ui.openEvent} onAdd={addOn} />
+        </div>
       ) : (
         <TimeGrid
           days={days}

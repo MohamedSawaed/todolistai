@@ -14,10 +14,11 @@ export const GET = route<Ctx>(async ({ repo }, _req, { params }) => {
 
 export const PATCH = route<Ctx>(async ({ repo }, req, { params }) => {
   const { id } = await params;
-  const { expectedVersion, allowOverlap, completed, ...rest } = await parseBody(req, eventPatchSchema);
+  const { expectedVersion, allowOverlap, completed, followUpDismissed, ...rest } = await parseBody(req, eventPatchSchema);
   const prefs = await repo.getPreferences();
   const patch: EventUpdate = { ...rest };
   if (completed !== undefined) patch.completedAt = completed ? new Date().toISOString() : null;
+  if (followUpDismissed !== undefined) patch.followUpDismissedAt = followUpDismissed ? new Date().toISOString() : null;
   const res = await repo.updateEventChecked(id, patch, { expectedVersion, allowOverlap: !!allowOverlap, bufferMinutes: prefs.bufferMinutes });
   if (!res.ok) {
     const current = await repo.getEvent(id);

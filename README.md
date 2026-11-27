@@ -66,6 +66,15 @@ app and showing notifications.
 - Open your link → create an account.
 - **iPhone (Safari):** Share → **Add to Home Screen**. **Android (Chrome):** ⋮ → **Install app** / **Add to Home screen**.
 
+**5. Notifications while the app is closed (web push)**
+1. Generate keys once: `npx web-push generate-vapid-keys`, and pick a long random `CRON_SECRET`.
+2. In Vercel add `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (Config), `VAPID_PRIVATE_KEY` (Secret) and
+   `CRON_SECRET` (Secret), then redeploy.
+3. In Supabase run `supabase/migrations/0003_push_and_followups.sql`, then
+   `supabase/setup-cron.example.sql` with your app URL and the same `CRON_SECRET`. This
+   creates a timer that calls `/api/push/dispatch` every minute.
+4. In Tempo → Settings, turn on **Phone notifications** and tap **Send a test notification**.
+
 Every push to `main` on GitHub redeploys automatically. If you change a `NEXT_PUBLIC_*`
 variable, redeploy so the new value is built in. `npm run test:db` checks the SQL migrations
 against a local Postgres without needing a Supabase project.

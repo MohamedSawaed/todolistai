@@ -18,12 +18,37 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// Notifications pushed by the server (arrive even when Tempo is closed)
+self.addEventListener("push", (event) => {
+  let msg = { title: "Tempo", body: "", url: "/", tag: undefined };
+  try {
+    msg = { ...msg, ...(event.data ? event.data.json() : {}) };
+  } catch {
+    if (event.data) msg.body = event.data.text();
+  }
+  event.waitUntil(
+    self.registration.showNotification(msg.title, {
+      body: msg.body,
+      tag: msg.tag,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      data: { url: msg.url || "/" },
+      vibrate: [120, 60, 120],
+    }),
+  );
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
       const open = wins.find((w) => "focus" in w);
-      return open ? open.focus() : self.clients.openWindow("/");
+      if (open) {
+        if ("navigate" in open) open.navigate(url).catch(() => undefined);
+        return open.focus();
+      }
+      return self.clients.openWindow(url);
     }),
   );
 });

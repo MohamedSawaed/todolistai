@@ -6,7 +6,7 @@ import { Button, Field, Input, Segmented, Select } from "@/components/ui";
 import { AvailabilityFields, ClockField, LanguageField, Section, TimezoneField } from "@/components/preferences-form";
 import { REMINDER_OPTIONS } from "@/components/composer";
 import { ReminderRulesEditor } from "@/components/reminder-rules";
-import { enableNotifications, showSystemNotification } from "@/lib/client/notify";
+import { enableNotifications, sendServerTestPush, serverPushAvailable, showSystemNotification, subscribeToPush, unsubscribeFromPush } from "@/lib/client/notify";
 
 const noopSubscribe = () => () => undefined;
 import { ApiError } from "@/lib/client/api";
@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const dirty = JSON.stringify(draft) !== JSON.stringify(prefs);
   const notifSupported = useSyncExternalStore(noopSubscribe, () => typeof Notification !== "undefined", () => true);
+  const pushAvailable = serverPushAvailable(status.storage);
 
   // reset the draft when saved preferences change (render-time derivation, no effect)
   if (base !== prefs) {
@@ -150,11 +151,14 @@ export default function SettingsPage() {
               onChange={async (e) => {
                 const on = e.target.checked;
                 if (on) {
-                  const res = await enableNotifications();
+                  // online version: register this device so the server can notify it while the app is closed
+                  const res = pushAvailable ? await subscribeToPush() : await enableNotifications();
                   if (!res.ok) {
                     toast({ message: res.reason, tone: "error" });
                     return;
                   }
+                } else if (pushAvailable) {
+                  await unsubscribeFromPush();
                 }
                 // saved right away (keeps any other unsaved edits in the draft)
                 const nextDraft = { ...draft, notifications: { ...draft.notifications, browser: on } };
@@ -168,20 +172,52 @@ export default function SettingsPage() {
               }}
               disabled={!notifSupported}
             />
-            Phone / browser notifications {notifSupported ? "" : "(this browser blocks them on non-secure connections)"}
+            <span>
+              Phone notifications {notifSupported ? "" : "(this browser blocks them on non-secure connections)"}
+              <span className="block text-[12.5px] text-ink-2">
+                {pushAvailable
+                  ? "Reminders arrive on this device even when Tempo is closed."
+                  : "Shown while Tempo is open. Use the online version for reminders when it's closed."}
+              </span>
+            </span>
           </label>
           {draft.notifications.browser && notifSupported ? (
             <Button
               type="button"
               size="sm"
               onClick={async () => {
-                const res = await enableNotifications().then((r) => (r.ok ? showSystemNotification("Tempo", "Notifications are working.", "tempo-test") : r));
-                if (res.ok) toast({ message: "Test notification sent. Check your notification bar." });
+                const res = pushAvailable
+                  ? await sendServerTestPush()
+                  : await enableNotifications().then((r) => (r.ok ? showSystemNotification("Tempo", "Notifications are working.", "tempo-test") : r));
+                if (res.ok) toast({ message: pushAvailable ? "Sent from the server — check your notification bar. Try it with the app closed too." : "Test notification sent." });
                 else toast({ message: res.reason, tone: "error" });
               }}
             >
               <Bell className="size-3.5" /> Send a test notification
             </Button>
+          ) : null}
+          <label className="flex items-center gap-3 text-[14px]">
+            <input
+              type="checkbox"
+              className="size-4 accent-[var(--primary)]"
+              checked={draft.notifications.morningBriefing}
+              onChange={(e) => setDraft({ ...draft, notifications: { ...draft.notifications, morningBriefing: e.target.checked } })}
+            />
+            <span>
+              Morning briefing notification
+              <span className="block text-[12.5px] text-ink-2">Your day at a glance, plus anything unfinished from before.</span>
+            </span>
+          </label>
+          {draft.notifications.morningBriefing ? (
+            <Field label="Briefing time" htmlFor="s-brief">
+              <Input
+                id="s-brief"
+                type="time"
+                className="w-36"
+                value={draft.notifications.briefingTime}
+                onChange={(e) => setDraft({ ...draft, notifications: { ...draft.notifications, briefingTime: e.target.value || "08:00" } })}
+              />
+            </Field>
           ) : null}
           <Field label="Default reminder when no rule matches">
             <Select

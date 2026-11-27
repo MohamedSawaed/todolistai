@@ -25,8 +25,10 @@ export interface CalendarEvent {
   reminders: number[];
   /** When set, this event is a scheduled work session for a task. */
   taskId: string | null;
-  /** Work sessions can be checked off independently of their task. */
+  /** Any event can be checked off (work sessions independently of their task). */
   completedAt: string | null;
+  /** The user answered the "did this happen?" follow-up without completing it. */
+  followUpDismissedAt: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -86,7 +88,17 @@ export interface Preferences {
   defaultDurations: { event: number; task: number; study: number; workout: number };
   defaultView: "day" | "week" | "month";
   bufferMinutes: number;
-  notifications: { inApp: boolean; browser: boolean; defaultReminder: number | null };
+  notifications: {
+    inApp: boolean;
+    /** Phone/desktop notifications, delivered by the server even when the app is closed. */
+    browser: boolean;
+    defaultReminder: number | null;
+    /** Morning summary notification at `briefingTime` (local). */
+    morningBriefing: boolean;
+    briefingTime: string; // HH:mm
+  };
+  /** Bumped when the default rules change, so saved settings can be upgraded. */
+  reminderRulesVersion: number;
   /** Activity-aware reminders: the first rule whose keyword or category matches wins. */
   reminderRules: ReminderRule[];
   theme: "system" | "light" | "dark";

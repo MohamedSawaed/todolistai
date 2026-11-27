@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DateTime } from "luxon";
-import { AlertTriangle, Lock } from "lucide-react";
+import { AlertTriangle, Check, Lock } from "lucide-react";
 import { usePrefs } from "../providers";
 import { cx } from "../ui";
 import { layoutColumns } from "@/lib/scheduling/engine";
@@ -46,7 +46,7 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 640px)");
-    const apply = () => setHourH(mq.matches ? 56 : 48);
+    const apply = () => setHourH(mq.matches ? 64 : 60);
     apply();
     mq.addEventListener("change", apply);
     const id = setInterval(() => setNow(Date.now()), 60_000);
@@ -221,7 +221,10 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
                     const isDragging = drag?.active && drag.event.id === ev.id;
                     const isPending = pending?.id === ev.id;
                     const overlapping = cols > 1;
-                    const short = lenMin * pxPerMin < 38;
+                    // short blocks still get room for one readable line
+                    const height = Math.max(lenMin * pxPerMin - 2, 26);
+                    const short = height < 42;
+                    const titleLines = Math.max(1, Math.floor((height - (short ? 6 : 24)) / 16));
                     return (
                       <div
                         key={ev.id}
@@ -230,6 +233,9 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
                         role="button"
                         tabIndex={0}
                         aria-label={`${ev.title}, ${fmtTimeRange(ev.startAt, ev.endAt, prefs)}${overlapping ? ", overlaps another event" : ""}`}
+                        title={`${ev.title}
+${fmtTimeRange(ev.startAt, ev.endAt, prefs)}${ev.location ? `
+${ev.location}` : ""}`}
                         onPointerDown={(e) => onPointerDown(ev, di, e)}
                         onPointerMove={onPointerMove}
                         onPointerUp={onPointerUp}
@@ -243,25 +249,36 @@ export function TimeGrid({ days, events, onSlot, onOpen, onMove, pending }: Prop
                         }}
                         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(ev))}
                         className={cx(
-                          "group absolute z-10 cursor-pointer overflow-hidden rounded-xl border-s-[3px] border-[var(--c)] bg-[var(--c-soft)] px-2 text-[var(--c-ink)] transition-[box-shadow,opacity] select-none hover:shadow-soft hover:z-20",
-                          short ? "py-0.5" : "py-1.5",
+                          "group absolute z-10 cursor-pointer overflow-hidden rounded-lg border border-s-[3px] border-[var(--c)]/25 border-s-[var(--c)] bg-[var(--c-soft)] px-2 text-ink shadow-[0_1px_2px_rgb(24_24_40/0.06)] transition-[box-shadow,opacity] select-none hover:z-20 hover:shadow-soft",
+                          short ? "py-1" : "py-1.5",
                           (isDragging || isPending) && "opacity-35",
                           overlapping && "ring-1 ring-[var(--cat-important)]/50",
                           ev.completedAt && "opacity-60",
                         )}
                         style={{
                           top: topMin * pxPerMin + 1,
-                          height: lenMin * pxPerMin - 2,
+                          height,
                           insetInlineStart: `calc(${(col / cols) * 100}% + 2px)`,
                           width: `calc(${100 / cols}% - 4px)`,
                         }}
                       >
-                        <p className={cx("flex items-center gap-1 truncate font-semibold", short ? "text-[11.5px]" : "text-[12.5px]")}>
-                          {overlapping ? <AlertTriangle className="size-3 shrink-0 text-[var(--cat-important)]" aria-hidden /> : null}
-                          {ev.flexibility === "fixed" && !short ? <Lock className="size-2.5 shrink-0 opacity-50" aria-hidden /> : null}
-                          <span className={cx("truncate", ev.completedAt && "line-through")}>{ev.title}</span>
+                        {!short ? (
+                          <p className="tabular flex items-center gap-1 truncate text-[11px] font-medium text-[var(--c-ink)]">
+                            {ev.completedAt ? <Check className="size-3 shrink-0" aria-hidden /> : null}
+                            {overlapping ? <AlertTriangle className="size-3 shrink-0 text-[var(--cat-important)]" aria-hidden /> : null}
+                            {fmtTimeRange(ev.startAt, ev.endAt, prefs)}
+                            {ev.flexibility === "fixed" ? <Lock className="size-2.5 shrink-0 opacity-60" aria-hidden /> : null}
+                          </p>
+                        ) : null}
+                        <p
+                          className={cx("text-[12.5px] leading-4 font-semibold break-words", ev.completedAt && "text-ink-3 line-through")}
+                          style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: titleLines, overflow: "hidden" }}
+                        >
+                          {short && ev.completedAt ? <Check className="me-0.5 inline size-3" aria-hidden /> : null}
+                          {ev.title}
+                          {short ? <span className="ms-1 font-normal text-ink-2">{fmtTime(ev.startAt, prefs)}</span> : null}
                         </p>
-                        {!short ? <p className="tabular truncate text-[11.5px] opacity-80">{fmtTimeRange(ev.startAt, ev.endAt, prefs)}</p> : null}
+                        {!short && ev.location && height > 24 + titleLines * 16 + 14 ? <p className="mt-0.5 truncate text-[11px] text-ink-2">{ev.location}</p> : null}
                       </div>
                     );
                   })}

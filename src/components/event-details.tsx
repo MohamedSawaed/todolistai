@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { CalendarClock, Clock, Lock, MapPin, Pencil, Sparkles, StickyNote, Trash2, Unlock, Bell } from "lucide-react";
 import { useAppUI, usePrefs, useToast } from "./providers";
-import { Badge, Button, CheckCircle, Sheet } from "./ui";
+import { Badge, Button, CheckCircle, Sheet, cx } from "./ui";
 import { EventForm } from "./composer";
 import { describeReminders } from "@/lib/reminders";
 import { CATEGORY_META } from "./pickers";
@@ -121,15 +121,26 @@ export function EventDetails() {
               </li>
             ) : null}
           </ul>
-          {event.taskId ? (
-            <div className="flex items-center gap-3 rounded-2xl border border-line p-3">
-              <CheckCircle checked={!!event.completedAt} onChange={toggleDone} label="Mark this work session done" category={event.category} />
-              <div className="min-w-0 text-[13.5px]">
-                <p className="font-medium">Work session{task ? ` for “${task.title}”` : ""}</p>
-                <p className="text-ink-2">Completing a session doesn&apos;t complete the task{task?.dueDate ? ` (due ${task.dueDate})` : ""}.</p>
-              </div>
+          <button
+            type="button"
+            onClick={() => void toggleDone(!event.completedAt)}
+            className={cx(
+              "flex w-full items-center gap-3 rounded-2xl border p-3 text-start transition-colors",
+              event.completedAt ? "border-[var(--cat-health)]/40 bg-[var(--cat-health-soft)]" : "border-line hover:border-primary/40",
+            )}
+          >
+            <CheckCircle checked={!!event.completedAt} onChange={(v) => void toggleDone(v)} label={event.completedAt ? "Mark as not done" : "Mark as done"} category={event.category} />
+            <div className="min-w-0 text-[13.5px]">
+              <p className="font-medium">{event.completedAt ? "Done" : "Mark as done"}</p>
+              <p className="text-ink-2">
+                {event.taskId
+                  ? `Work session${task ? ` for “${task.title}”` : ""} — completing it doesn't complete the task${task?.dueDate ? ` (due ${task.dueDate})` : ""}.`
+                  : event.completedAt
+                    ? "Tap to mark it as not done."
+                    : "If it's not done by tomorrow, Tempo will ask whether to find a new time."}
+              </p>
             </div>
-          ) : null}
+          </button>
 
           {mode === "confirm-delete" ? (
             <div role="alert" className="animate-rise rounded-2xl border border-danger/30 bg-danger-soft p-3.5">

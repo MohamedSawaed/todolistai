@@ -5,7 +5,7 @@ import { AlarmClock, Bell, CalendarClock, CircleAlert } from "lucide-react";
 import { useAppUI, usePrefs, useToast } from "./providers";
 import { Button, cx } from "./ui";
 import { useEvents, useNow, useTasks } from "@/lib/client/hooks";
-import { showSystemNotification } from "@/lib/client/notify";
+import { serverPushAvailable, showSystemNotification, subscribeToPush } from "@/lib/client/notify";
 import { fmtTime, fmtTimeRange, todayLocal } from "@/lib/client/format";
 import type { CalendarEvent } from "@/lib/types";
 
@@ -50,7 +50,15 @@ async function systemNotify(title: string, body: string, tag: string) {
 }
 
 export function useReminders() {
-  const { prefs } = usePrefs();
+  const { prefs, status } = usePrefs();
+  const pushAvailable = serverPushAvailable(status.storage);
+
+  // Make sure this device is registered for server push (e.g. after reinstalling or a new phone).
+  useEffect(() => {
+    if (pushAvailable && prefs.notifications.browser && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      void subscribeToPush();
+    }
+  }, [pushAvailable, prefs.notifications.browser]);
   const { tasks, today } = useUpcoming();
   // reminders can be up to 2 weeks ahead, so look further than the visible schedule
   const reminderQuery = useEvents(today, DateTime.fromISO(today).plus({ days: 15 }).toISODate()!, prefs.timezone);
@@ -90,10 +98,11 @@ export function useReminders() {
     for (const d of due) {
       fired.add(d.key);
       if (prefs.notifications.inApp) toast({ message: `${d.title} — ${d.body}`, action: d.event ? { label: "Open", onClick: () => openEvent(d.event!) } : undefined });
-      if (prefs.notifications.browser) void systemNotify(d.title, d.body, d.key);
+      // with server push, the phone already got this as a notification — don't show it twice
+      if (prefs.notifications.browser && !pushAvailable) void systemNotify(d.title, d.body, d.key);
     }
     if (due.length) writeFired(fired);
-  }, [reminderEvents, tasks, tick, prefs, toast, openEvent]);
+  }, [reminderEvents, tasks, tick, prefs, toast, openEvent, pushAvailable]);
 }
 
 export function NotificationBell({ className }: { className?: string }) {

@@ -39,6 +39,7 @@ function toEvent(r: Row): CalendarEvent {
     reminders: (r.reminders as number[] | null) ?? [],
     taskId: r.task_id,
     completedAt: iso(r.completed_at),
+    followUpDismissedAt: iso(r.followup_dismissed_at ?? null),
     version: r.version,
     createdAt: iso(r.created_at)!,
     updatedAt: iso(r.updated_at)!,
@@ -219,6 +220,7 @@ export class SupabaseRepository implements Repository {
           reminders: s.reminders,
           task_id: s.taskId,
           completed_at: s.completedAt,
+          followup_dismissed_at: s.followUpDismissedAt,
           version: s.version + 1,
         })
         .select("*")

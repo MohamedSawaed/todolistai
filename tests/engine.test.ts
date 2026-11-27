@@ -8,6 +8,7 @@ import {
   mergeIntervals,
   overlaps,
   suggestAlternatives,
+  suggestReschedule,
   windowOnDate,
 } from "@/lib/scheduling/engine";
 import { dayBounds, localTime, localToUtc, minutesBetween } from "@/lib/scheduling/time";
@@ -184,5 +185,26 @@ describe("calendar layout", () => {
     expect(layout.get("a")).toEqual({ col: 0, cols: 2 });
     expect(layout.get("b")).toEqual({ col: 1, cols: 2 });
     expect(layout.get("c")).toEqual({ col: 0, cols: 1 });
+  });
+});
+
+describe("rescheduling something that didn't happen", () => {
+  it("offers the same time on the next free days, then the earliest free slot — never overlapping", () => {
+    const missed = ev("gym", "2027-01-10T17:00:00Z", "2027-01-10T18:00:00Z", "Gym");
+    const busyTomorrow = ev("dinner", "2027-01-11T17:00:00Z", "2027-01-11T18:30:00Z", "Dinner");
+    const slots = suggestReschedule({
+      event: missed,
+      events: [missed, busyTomorrow],
+      zone: "UTC",
+      window: { start: "07:00", end: "23:00" },
+      now: "2027-01-11T08:00:00Z",
+    });
+    expect(slots.length).toBe(3);
+    for (const s of slots) {
+      expect(findConflicts(s, [busyTomorrow])).toHaveLength(0);
+      expect(minutesBetween(s.start, s.end)).toBe(60);
+      expect(s.start > "2027-01-11T08:00:00").toBe(true);
+    }
+    expect(slots.some((s) => s.start === "2027-01-12T17:00:00.000Z")).toBe(true); // same time, first free day
   });
 });
