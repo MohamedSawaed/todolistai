@@ -22,7 +22,8 @@ const NAV: { href: string; msg: string; icon: typeof Home }[] = [
 export function Logo({ className }: { className?: string }) {
   return (
     <span className={cx("inline-flex items-center gap-2 font-semibold tracking-tight", className)}>
-      <ThinkingBlob size={30} still />
+      {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand mark, same file as the app icon */}
+      <img src="/icon-192.png" alt="" width={30} height={30} className="size-[30px] rounded-[9px] shadow-[0_2px_10px_rgb(118_101_216/0.35)]" />
       <span className="text-[16px]">PlanMind</span>
     </span>
   );
