@@ -3,7 +3,7 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { DateTime } from "luxon";
 import { Check, Sparkles, X } from "lucide-react";
-import { ThinkingBlob } from "./blob";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
 import { useAppUI, usePrefs } from "./providers";
 import { Button, cx } from "./ui";
 import { useEvents, useNow } from "@/lib/client/hooks";
@@ -79,7 +79,7 @@ export function EveningReview() {
   if (!open && !fromNotification) {
     return (
       <section aria-label={t("Evening review")} className="mt-6 flex flex-wrap items-center gap-3 rounded-3xl border border-primary/20 bg-primary-soft/40 p-4">
-        <ThinkingBlob state="resting" size={40} />
+        <ThinkingBlob state="resting" size={44} still decorative />
         <p className="min-w-0 flex-1 text-[14px] font-medium">{t("Would you like to review today's unfinished activities?")}</p>
         <div className="flex gap-2">
           <Button size="sm" variant="primary" onClick={() => setOpen(true)}>
@@ -96,7 +96,7 @@ export function EveningReview() {
   return (
     <section aria-label={t("Evening review")} className="mt-6 rounded-3xl border border-primary/20 bg-surface p-4 sm:p-5">
       <div className="mb-3 flex items-center gap-2">
-        <ThinkingBlob size={30} className="-my-1" />
+        <ThinkingBlob size={36} still decorative className="-my-1.5" />
         <h2 className="flex-1 text-[15px] font-semibold">{t("How did today go?")}</h2>
         <Button size="icon-sm" variant="ghost" aria-label={t("Close")} onClick={() => writeState(today, "later")}>
           <X className="size-4" />

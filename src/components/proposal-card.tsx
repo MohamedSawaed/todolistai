@@ -12,7 +12,8 @@ import { describeReminders } from "@/lib/reminders";
 import { countLabel, msg, type TFunction } from "@/lib/i18n";
 import type { Interval, Proposal } from "@/lib/types";
 import { CaptureCard } from "./capture/capture-card";
-import { ThinkingBlob } from "./blob";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
+import { useMascot } from "./mascot/controller";
 
 type ConfirmResponse = { status: "applied" | "conflict" | "stale"; proposal: Proposal; message?: string };
 
@@ -26,6 +27,7 @@ function ActionCard({ proposal, onUpdate }: { proposal: Proposal; onUpdate: (p: 
   const { prefs, t } = usePrefs();
   const toast = useToast();
   const invalidate = useInvalidateAll();
+  const { send: mascotSend } = useMascot();
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -41,15 +43,23 @@ function ActionCard({ proposal, onUpdate }: { proposal: Proposal; onUpdate: (p: 
       const res = await api<ConfirmResponse | { status: string; proposal: Proposal }>(`/api/proposals/${proposal.id}`, { method: "POST", body: { action, ...extra } });
       onUpdate(res.proposal);
       if (action !== "cancel") await invalidate();
-      if (action === "confirm") toast({ message: successMessage(proposal, t), action: { label: t("Undo"), onClick: () => void act("undo") } });
+      if (action === "confirm") {
+        mascotSend({ type: "EVENT_SAVE_SUCCEEDED" }); // the server confirmed it was saved
+        toast({ message: successMessage(proposal, t), mascot: true, action: { label: t("Undo"), onClick: () => void act("undo") } });
+      }
+      if (action === "cancel") mascotSend({ type: "ATTENTION_RESOLVED" });
       if (action === "undo") toast({ message: t("Change undone") });
     } catch (err) {
       if (err instanceof ApiError && (err.body.status === "conflict" || err.body.status === "stale")) {
         // the server re-checked the calendar at write time and found a problem; nothing was saved
         onUpdate(err.body.proposal as Proposal);
         setNotice(t(String(err.body.message ?? err.message)));
+        mascotSend({ type: err.body.status === "conflict" ? "SCHEDULING_CONFLICT_FOUND" : "OPERATION_FAILED" });
         await invalidate();
-      } else setNotice(err instanceof Error ? t(err.message) : t("Something went wrong. Nothing was changed."));
+      } else {
+        setNotice(err instanceof Error ? t(err.message) : t("Something went wrong. Nothing was changed."));
+        mascotSend({ type: "OPERATION_FAILED" });
+      }
     } finally {
       setBusy(null);
     }
@@ -60,7 +70,7 @@ function ActionCard({ proposal, onUpdate }: { proposal: Proposal; onUpdate: (p: 
   const mood = proposal.status === "applied" ? "success" : conflicted ? "conflict" : null;
   const header = (icon: React.ReactNode, label: string) => (
     <div className="mb-2.5 flex items-center gap-2 text-[11.5px] font-semibold tracking-wide text-ink-3 uppercase">
-      {mood ? <ThinkingBlob state={mood} size={26} className="-my-1.5" /> : icon}
+      {mood ? <ThinkingBlob state={mood} size={32} still className="-my-2" /> : icon}
       {label}
       <StatusBadge proposal={proposal} expired={expired} />
     </div>

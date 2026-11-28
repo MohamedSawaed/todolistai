@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, ClipboardPaste, FileText, ImagePlus, Paperclip, RefreshCw, ScanText, Sparkles, X } from "lucide-react";
 import { usePrefs } from "../providers";
-import { ThinkingBlob } from "../blob";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
 import { Button, cx } from "../ui";
 import { draftFromFiles, type CaptureDraft, type CaptureType } from "@/lib/client/capture";
 import { msg, type TFunction } from "@/lib/i18n";
@@ -259,7 +259,7 @@ export function CaptureProgress() {
   }, []);
   return (
     <div className="flex animate-rise items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3" aria-live="polite">
-      <ThinkingBlob state="thinking" size={44} />
+      <ThinkingBlob state="thinking" size={40} still decorative />
       <div className="min-w-0">
         <p className="text-[13.5px] font-medium">{t(STEPS[step])}</p>
         <div className="mt-1 flex gap-1" aria-hidden>

@@ -5,7 +5,8 @@ import { DateTime } from "luxon";
 import { ArrowUp, CalendarPlus, CalendarSearch, CheckSquare, ListRestart, MapPin, MoreHorizontal, Plus, Sparkles, StickyNote, Sun } from "lucide-react";
 import { useAppUI, usePrefs } from "@/components/providers";
 import { Button, CheckCircle, EmptyState, Skeleton, cx } from "@/components/ui";
-import { ThinkingBlob } from "@/components/blob";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
+import { useMascot } from "@/components/mascot/controller";
 import { WeekStrip, weekStart } from "@/components/week-strip";
 import { NotificationBell } from "@/components/notifications";
 import { DailyBriefing } from "@/components/briefing";
@@ -39,6 +40,7 @@ export default function TodayPage() {
   const tasks = useTasks();
   const notes = useNotes(selected, selected);
   const { update } = useTaskMutations();
+  const mascot = useMascot();
 
   const now = useNow();
   // every event that touches the selected local day (including ones crossing midnight)
@@ -168,7 +170,7 @@ export default function TodayPage() {
           </div>
         ) : dayEvents.length === 0 ? (
           <EmptyState
-            art={<ThinkingBlob state="resting" size={72} />}
+            art={<ThinkingBlob state="resting" size={120} decorative />}
             title={isToday ? t("Your schedule is clear today.") : t("Nothing scheduled this day.")}
             body={t("Add something yourself, or tell the assistant what you need to get done.")}
             actions={
@@ -205,7 +207,7 @@ export default function TodayPage() {
               <li key={tk.id} className="flex items-center gap-3 px-4 py-3">
                 <CheckCircle
                   checked={tk.status === "completed"}
-                  onChange={(v) => update.mutate({ id: tk.id, patch: { status: v ? "completed" : "open" } })}
+                  onChange={(v) => update.mutate({ id: tk.id, patch: { status: v ? "completed" : "open" } }, { onSuccess: () => v && mascot.send({ type: "TASK_COMPLETED" }) })}
                   label={t("Complete “{title}”", { title: tk.title })}
                   category={tk.category}
                 />

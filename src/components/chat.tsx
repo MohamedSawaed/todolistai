@@ -8,7 +8,9 @@ import { ProposalCard } from "./proposal-card";
 import { api, ApiError } from "@/lib/client/api";
 import { msg } from "@/lib/i18n";
 import type { ChatMessageView, Proposal } from "@/lib/types";
-import { ThinkingBlob, type BlobState } from "./blob";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
+import { trackRequest, useMascot } from "@/components/mascot/controller";
+import type { MascotState as BlobState } from "@/lib/mascot";
 import { AttachButton, CapturePreview, CaptureProgress } from "./capture/capture-composer";
 import { buildCaptureForm, draftFromFiles, postCapture, type CaptureDraft } from "@/lib/client/capture";
 
@@ -27,6 +29,7 @@ interface Thread {
 export function ChatView({ compact = false, incoming = null }: { compact?: boolean; incoming?: CaptureDraft | null }) {
   const { prefs, status, t } = usePrefs();
   const ui = useAppUI();
+  const mascot = useMascot();
   const qc = useQueryClient();
   const history = useQuery({ queryKey: ["assistant"], queryFn: () => api<Thread>("/api/assistant"), staleTime: Infinity });
   const [thread, setThread] = useState<Thread>({ conversationId: null, messages: [] });
@@ -73,10 +76,15 @@ export function ChatView({ compact = false, incoming = null }: { compact?: boole
     setThread((t) => ({ ...t, messages: [...t.messages, optimistic] }));
     setSending(true);
     try {
-      const res = await api<{ conversationId: string; reply: ChatMessageView }>("/api/assistant", {
-        method: "POST",
-        body: { message: trimmed, conversationId: thread.conversationId, newConversation: opts.newConversation },
-      });
+      const res = await trackRequest(
+        mascot.send,
+        () =>
+          api<{ conversationId: string; reply: ChatMessageView }>("/api/assistant", {
+            method: "POST",
+            body: { message: trimmed, conversationId: thread.conversationId, newConversation: opts.newConversation },
+          }),
+        (r) => outcomeOf(r.reply),
+      );
       setThread((t) => ({ conversationId: res.conversationId, messages: [...t.messages, res.reply] }));
     } catch (err) {
       // remove the optimistic bubble and give the text back so nothing is lost
@@ -96,7 +104,7 @@ export function ChatView({ compact = false, incoming = null }: { compact?: boole
     setCapturing(true);
     try {
       const form = await buildCaptureForm(draft, thread.conversationId);
-      const res = await postCapture<{ conversationId: string; userMessage: ChatMessageView; reply: ChatMessageView }>(form);
+      const res = await trackRequest(mascot.send, () => postCapture<{ conversationId: string; userMessage: ChatMessageView; reply: ChatMessageView }>(form), (r) => outcomeOf(r.reply));
       setThread((t) => ({ conversationId: res.conversationId, messages: [...t.messages, res.userMessage, res.reply] }));
       setDraft(null);
     } catch (err) {
@@ -168,7 +176,7 @@ export function ChatView({ compact = false, incoming = null }: { compact?: boole
             </div>
           ) : empty ? (
             <div className="flex animate-fade-in flex-col items-center px-2 pt-6 pb-2 text-center">
-              <ThinkingBlob size={compact ? 64 : 84} className="mb-3" />
+              <ThinkingBlob size={compact ? 96 : 128} className="mb-2" decorative />
               <h2 className="text-[19px] font-semibold tracking-tight">{firstName ? t("How can I help, {name}?", { name: firstName }) : t("How can I help?")}</h2>
               <p className="mt-1.5 max-w-sm text-[13.5px] text-ink-2">
                 {t("Tell me what you need to do. I'll check your real calendar, find time, and prepare changes for you to confirm.")}
@@ -197,7 +205,11 @@ export function ChatView({ compact = false, incoming = null }: { compact?: boole
           {capturing ? <CaptureProgress /> : null}
           {sending ? (
             <div className="flex animate-rise items-center gap-2 text-[13px] text-ink-2" aria-live="polite">
-              <ThinkingBlob state="thinking" size={40} label={t("Assistant is thinking")} />
+              <span className="flex gap-1 rounded-2xl rounded-ss-md bg-surface-2 px-3.5 py-3" aria-label={t("Assistant is thinking")}>
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="typing-dot size-1.5 rounded-full bg-ink-3" style={{ animationDelay: `${i * 0.15}s` }} />
+                ))}
+              </span>
               {t("Checking your calendar…")}
             </div>
           ) : null}
@@ -311,7 +323,13 @@ export function ChatView({ compact = false, incoming = null }: { compact?: boole
   );
 }
 
-/** How the assistant feels about its latest message: alert on a conflict, pleased once it's done. */
+/** What a reply means for the character: real conflicts and proposals, as validated by the server. */
+function outcomeOf(m: ChatMessageView): "answer" | "proposal" | "conflict" {
+  const mood = moodOf(m);
+  return mood === "conflict" ? "conflict" : m.proposals.some((p) => p.status === "pending") ? "proposal" : "answer";
+}
+
+/** The expression on a reply's avatar: alert on a conflict, pleased once it's done. */
 function moodOf(m: ChatMessageView): BlobState {
   const open = m.proposals.filter((p) => p.status === "pending");
   const conflict = open.some((p) => {
@@ -322,7 +340,7 @@ function moodOf(m: ChatMessageView): BlobState {
   });
   if (conflict) return "conflict";
   if (m.proposals.length && m.proposals.every((p) => p.status === "applied")) return "success";
-  return "responding";
+  return m.proposals.some((p) => p.status === "pending") ? "suggestion-ready" : "idle";
 }
 
 function Message({ m, onUpdate, latest }: { m: ChatMessageView; onUpdate: (p: Proposal) => void; latest: boolean }) {
@@ -336,7 +354,7 @@ function Message({ m, onUpdate, latest }: { m: ChatMessageView; onUpdate: (p: Pr
   return (
     <div className="flex animate-rise flex-col gap-2.5">
       <div className="flex items-start gap-2.5">
-        <ThinkingBlob state={latest ? moodOf(m) : "idle"} still={!latest} size={latest ? 30 : 26} className="-mt-0.5" />
+        <ThinkingBlob state={latest ? moodOf(m) : "idle"} still size={36} className="-mt-1" />
         <p className="min-w-0 pt-0.5 text-[14px] leading-relaxed whitespace-pre-wrap">{m.text}</p>
       </div>
       {m.proposals.length ? (

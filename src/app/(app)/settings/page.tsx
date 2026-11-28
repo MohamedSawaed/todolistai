@@ -5,6 +5,7 @@ import { fmtDate } from "@/lib/client/format";
 import { Bell, Check, Database, KeyRound, LogOut } from "lucide-react";
 import { usePrefs, useToast } from "@/components/providers";
 import { Button, Field, Input, Segmented, Select } from "@/components/ui";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
 import { AvailabilityFields, ClockField, LanguageField, Section, TimezoneField } from "@/components/preferences-form";
 import { reminderOptions } from "@/components/composer";
 import { ReminderRulesEditor } from "@/components/reminder-rules";
@@ -275,6 +276,40 @@ export default function SettingsPage() {
               { value: "dark", label: t("Dark") },
             ]}
           />
+        </Section>
+
+        <Section title={t("Assistant character")} description={t("The Thinking Blob shows what the assistant is doing. Everything works the same without it.")}>
+          <div className="flex items-start gap-4">
+            <ThinkingBlob state={draft.mascot.show ? "idle" : "resting"} size={72} decorative className={draft.mascot.show ? "" : "opacity-40"} />
+            <div className="min-w-0 flex-1 space-y-4">
+              <label className="flex items-center gap-3 text-[14px]">
+                <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={draft.mascot.show} onChange={(e) => setDraft({ ...draft, mascot: { ...draft.mascot, show: e.target.checked } })} />
+                {t("Show the character")}
+              </label>
+              {draft.mascot.show ? (
+                <>
+                  <Field label={t("Animation")}>
+                    <Segmented
+                      value={draft.mascot.motion}
+                      onChange={(motion) => setDraft({ ...draft, mascot: { ...draft.mascot, motion } })}
+                      options={[
+                        { value: "subtle", label: t("Subtle") },
+                        { value: "normal", label: t("Normal") },
+                        { value: "off", label: t("Off") },
+                      ]}
+                    />
+                  </Field>
+                  <label className="flex items-center gap-3 text-[14px]">
+                    <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={draft.mascot.celebrate} onChange={(e) => setDraft({ ...draft, mascot: { ...draft.mascot, celebrate: e.target.checked } })} />
+                    <span>
+                      {t("Celebrate completed work")}
+                      <span className="block text-[12.5px] text-ink-2">{t("A small reaction after something is saved or completed.")}</span>
+                    </span>
+                  </label>
+                </>
+              ) : null}
+            </div>
+          </div>
         </Section>
 
         <Section title={t("Data")}>

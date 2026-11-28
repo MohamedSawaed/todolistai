@@ -5,6 +5,7 @@ import { api, ApiError } from "./api";
 import { useInvalidateAll } from "./hooks";
 import { fmtSlot } from "./format";
 import { usePrefs, useToast } from "@/components/providers";
+import { useMascot } from "@/components/mascot/controller";
 import type { CalendarEvent, Interval } from "../types";
 
 /** Mark done / not done, dismiss a follow-up, or move an event — with toasts and undo. */
@@ -13,6 +14,7 @@ export function useEventActions() {
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const qc = useQueryClient();
+  const { send: mascotSend } = useMascot();
 
   const patch = useCallback(
     async (event: CalendarEvent, body: Record<string, unknown>) => {
@@ -37,10 +39,11 @@ export function useEventActions() {
     async (event: CalendarEvent, done: boolean) => {
       const updated = await patch(event, { completed: done }).catch(() => null);
       if (updated && done) {
-        toast({ message: t("Done: “{title}”", { title: event.title }), action: { label: t("Undo"), onClick: () => void patch(updated, { completed: false }).catch(() => undefined) } });
+        mascotSend({ type: "TASK_COMPLETED" });
+        toast({ message: t("Done: “{title}”", { title: event.title }), mascot: true, action: { label: t("Undo"), onClick: () => void patch(updated, { completed: false }).catch(() => undefined) } });
       }
     },
-    [patch, toast, t],
+    [patch, toast, t, mascotSend],
   );
 
   const dismissFollowUp = useCallback(

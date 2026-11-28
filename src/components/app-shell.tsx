@@ -4,7 +4,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { CalendarDays, CheckSquare, Home, Keyboard, Plus, Settings, Sparkles, X } from "lucide-react";
 import { useAppUI, usePrefs } from "./providers";
-import { ThinkingBlob } from "./blob";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
+import { LiveMascot, MascotProvider } from "@/components/mascot/controller";
+import { Splash } from "@/components/mascot/splash";
 import { Button, Kbd, Sheet, cx } from "./ui";
 import { Composer } from "./composer";
 import { EventDetails } from "./event-details";
@@ -30,6 +32,15 @@ export function Logo({ className }: { className?: string }) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <MascotProvider>
+      <Splash />
+      <Shell>{children}</Shell>
+    </MascotProvider>
+  );
+}
+
+function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { t, status } = usePrefs();
@@ -130,7 +141,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <div className="flex items-center justify-between border-b border-line px-4 py-3">
               <span className="flex items-center gap-2 text-[14px] font-semibold">
-                <ThinkingBlob size={22} /> {t("Assistant")}
+                <LiveMascot size={32} className="-my-1.5" /> {t("Assistant")}
               </span>
               <div className="flex items-center gap-1">
                 <Link href="/assistant" className="rounded-lg px-2 py-1 text-[12px] text-ink-2 hover:bg-surface-2" onClick={() => ui.setAssistantOpen(false)}>

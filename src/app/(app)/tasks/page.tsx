@@ -4,7 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { DateTime } from "luxon";
 import { CalendarClock, CalendarPlus, ChevronDown, Plus, Sparkles, StickyNote, Trash2 } from "lucide-react";
 import { useAppUI, usePrefs, useToast } from "@/components/providers";
-import { ThinkingBlob } from "@/components/blob";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
+import { useMascot } from "@/components/mascot/controller";
 import { Badge, Button, CheckCircle, EmptyState, Field, Input, Select, Skeleton, Textarea, cx } from "@/components/ui";
 import { CATEGORY_META, PRIORITY_META, PriorityPicker } from "@/components/pickers";
 import { useNotes, useTaskMutations, useTasks, useInvalidateAll, type TaskWithSessions } from "@/lib/client/hooks";
@@ -139,7 +140,7 @@ function Tasks() {
               </div>
             ) : list.length === 0 ? (
               <EmptyState
-                art={<ThinkingBlob state={view === "overdue" ? "success" : "resting"} size={64} />}
+                art={<ThinkingBlob state={view === "overdue" ? "success" : "resting"} size={120} decorative />}
                 title={view === "completed" ? t("No completed tasks yet.") : view === "overdue" ? t("Nothing overdue. Nice.") : t("No tasks here.")}
                 body={view === "completed" ? undefined : t("Add a task, or tell the assistant something like “I need to finish my project by Friday.”")}
                 actions={
@@ -168,6 +169,7 @@ function TaskRow({ task, today }: { task: TaskWithSessions; today: string }) {
   const { prefs, status, t } = usePrefs();
   const ui = useAppUI();
   const toast = useToast();
+  const mascot = useMascot();
   const { update, remove } = useTaskMutations();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -186,8 +188,18 @@ function TaskRow({ task, today }: { task: TaskWithSessions; today: string }) {
         <CheckCircle
           checked={done}
           onChange={(v) => {
-            update.mutate({ id: task.id, patch: { status: v ? "completed" : "open" } });
-            if (v) toast({ message: t("Completed “{title}”", { title: task.title }), action: { label: t("Undo"), onClick: () => update.mutate({ id: task.id, patch: { status: "open" } }) } });
+            update.mutate(
+              { id: task.id, patch: { status: v ? "completed" : "open" } },
+              {
+                // react only once the server has saved it
+                onSuccess: () => {
+                  if (!v) return;
+                  mascot.send({ type: "TASK_COMPLETED" });
+                  toast({ message: t("Completed “{title}”", { title: task.title }), mascot: true, action: { label: t("Undo"), onClick: () => update.mutate({ id: task.id, patch: { status: "open" } }) } });
+                },
+                onError: () => mascot.send({ type: "OPERATION_FAILED" }),
+              },
+            );
           }}
           label={t("Complete “{title}”", { title: task.title })}
           category={task.category}

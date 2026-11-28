@@ -148,6 +148,7 @@ export const preferencesSchema = z.object({
     )
     .max(20),
   theme: z.enum(["system", "light", "dark"]),
+  mascot: z.object({ show: z.boolean(), motion: z.enum(["subtle", "normal", "off"]), celebrate: z.boolean() }),
   ai: z.object({
     preferredFocus: z.enum(["morning", "afternoon", "evening", "any"]),
     autoSuggestSessions: z.boolean(),
@@ -172,6 +173,7 @@ export function defaultPreferences(timezone = "UTC"): Preferences {
     reminderRules: DEFAULT_REMINDER_RULES,
     reminderRulesVersion: REMINDER_RULES_VERSION,
     theme: "system",
+    mascot: { show: true, motion: "subtle", celebrate: true },
     ai: { preferredFocus: "any", autoSuggestSessions: true },
     onboarded: false,
   };
@@ -190,6 +192,7 @@ export function normalizePreferences(raw: unknown, fallbackZone = "UTC"): Prefer
     defaultDurations: { ...base.defaultDurations, ...r.defaultDurations },
     notifications: { ...base.notifications, ...r.notifications },
     ai: { ...base.ai, ...r.ai },
+    mascot: { ...base.mascot, ...r.mascot },
   };
   const upgraded = upgradeReminderRules(merged.reminderRules, r.reminderRulesVersion ?? 1);
   merged.reminderRules = upgraded;

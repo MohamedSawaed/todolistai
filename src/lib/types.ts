@@ -120,6 +120,8 @@ export interface Preferences {
   /** Activity-aware reminders: the first rule whose keyword or category matches wins. */
   reminderRules: ReminderRule[];
   theme: "system" | "light" | "dark";
+  /** The Thinking Blob, PlanMind's assistant character. */
+  mascot: { show: boolean; motion: "subtle" | "normal" | "off"; celebrate: boolean };
   ai: { preferredFocus: "morning" | "afternoon" | "evening" | "any"; autoSuggestSessions: boolean };
   onboarded: boolean;
 }

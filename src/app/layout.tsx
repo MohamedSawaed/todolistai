@@ -54,6 +54,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* first launch only: show the short introduction before the page paints (no flash) */}
+        <script dangerouslySetInnerHTML={{ __html: "try{if(!localStorage.getItem('planmind.introduced'))document.documentElement.setAttribute('data-splash','')}catch(e){}" }} />
+      </head>
       <body className="min-h-full">
         <Providers
           initialPrefs={prefs}

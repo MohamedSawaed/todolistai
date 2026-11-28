@@ -1,5 +1,5 @@
 "use client";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 const noopSubscribe = () => () => undefined;
 import { useRouter } from "next/navigation";
@@ -7,7 +7,7 @@ import { ArrowRight, CalendarDays, MousePointerClick, Sparkles } from "lucide-re
 import { usePrefs } from "./providers";
 import { Button, Field, Input, cx } from "./ui";
 import { Logo } from "./app-shell";
-import { ThinkingBlob } from "./blob";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
 import { AvailabilityFields, ClockField, LanguageField, TimezoneField } from "./preferences-form";
 import { createSupabaseBrowserClient, googleAuthEnabled } from "@/lib/supabase/client";
 import { isValidZone } from "@/lib/scheduling/time";
@@ -82,9 +82,14 @@ export function Onboarding({ signedIn, startAt }: { signedIn: boolean; startAt: 
 
         {step === "welcome" ? (
           <div key="welcome" className="animate-rise">
-            <WelcomeArt />
-            <h1 className="mt-8 text-[34px] leading-[1.1] font-semibold tracking-tight sm:text-[40px]">{t("Your time, intelligently organized.")}</h1>
-            <p className="mt-3 text-[16px] text-ink-2">{t("Meet the personal planner that turns your plans into a schedule.")}</p>
+            <div className="flex justify-center">
+              <ThinkingBlob size={200} decorative />
+            </div>
+            <h1 className="mt-4 text-center text-[30px] leading-[1.12] font-semibold tracking-tight sm:text-[36px]">{t("Meet your new planning companion.")}</h1>
+            <p className="mt-2 text-center text-[16px] text-ink-2">{t("Tell it what you need to do. It helps organize the rest.")}</p>
+            <div className="mt-6">
+              <WelcomeArt />
+            </div>
             <Button variant="primary" size="lg" className="mt-8 w-full sm:w-auto" onClick={() => setStep(needsAccount ? "account" : "prefs")}>
               {t("Get started")}{" "}<ArrowRight className="size-4 rtl:rotate-180" />
             </Button>
@@ -127,7 +132,13 @@ export function Onboarding({ signedIn, startAt }: { signedIn: boolean; startAt: 
 
         {step === "intro" ? (
           <div key="intro" className="animate-rise">
-            <h1 className="text-[26px] font-semibold tracking-tight">{t("Three ways to plan")}</h1>
+            <div className="flex items-center gap-3">
+              <ThinkingBlob state="success" size={96} decorative className="-my-2 shrink-0" />
+              <div>
+                <h1 className="text-[26px] leading-tight font-semibold tracking-tight">{t("Your plans. Under control.")}</h1>
+                <p className="mt-1 text-[14px] text-ink-2">{t("Three ways to plan")}</p>
+              </div>
+            </div>
             <ul className="mt-6 space-y-3">
               {[
                 { icon: MousePointerClick, title: t("Add things yourself"), body: t("Press + (or N on a keyboard) to add an event, task or note. Click any empty time in the calendar to start there.") },
@@ -155,7 +166,7 @@ export function Onboarding({ signedIn, startAt }: { signedIn: boolean; startAt: 
                 {t("Back")}
               </Button>
               <Button variant="primary" size="lg" loading={saving} onClick={finish}>
-                {t("Go to Today")}{" "}<ArrowRight className="size-4 rtl:rotate-180" />
+                {t("Start planning")}{" "}<ArrowRight className="size-4 rtl:rotate-180" />
               </Button>
             </div>
           </div>
@@ -254,25 +265,33 @@ function AccountStep({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** A short, clearly-labelled example of how the assistant helps (not a real request). */
 function WelcomeArt() {
   const { t } = usePrefs();
+  const [found, setFound] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setFound(true), 1600);
+    return () => clearTimeout(id);
+  }, []);
   return (
-    <div className="relative h-44 overflow-hidden rounded-3xl border border-line bg-surface p-4 shadow-soft" aria-hidden>
-      <div className="flex items-center gap-2 rounded-2xl border border-line bg-surface-2/60 px-3 py-2.5 text-[13px] text-ink-2">
-        <ThinkingBlob size={22} still />{" "}{t("Tomorrow at 5 PM I need to visit the dentist")}
-      </div>
-      <div className="mt-3 ms-6 animate-rise rounded-2xl border border-line bg-surface p-3" style={{ animationDelay: "250ms", animationFillMode: "backwards" }}>
-        <div data-cat="health" className="flex gap-2.5">
-          <span className="w-1 rounded-full bg-[var(--c)]" />
-          <div>
-            <p className="text-[14px] font-semibold">{t("Dentist Appointment")}</p>
-            <p className="text-[12.5px] text-ink-2">{t("Tomorrow · 5:00–6:00 PM · Health")}</p>
+    <div className="relative overflow-hidden rounded-3xl border border-line bg-surface p-4 shadow-soft" aria-hidden>
+      <span className="absolute end-3 top-3 rounded-md bg-surface-2 px-1.5 py-0.5 text-[10.5px] font-medium tracking-wide text-ink-3 uppercase">{t("Example")}</span>
+      <div className="ms-auto w-fit max-w-[85%] rounded-2xl rounded-se-md bg-primary px-3.5 py-2 text-[13px] text-white">{t("Find an hour for studying tomorrow.")}</div>
+      <div className="mt-3 flex items-end gap-2.5">
+        <ThinkingBlob state={found ? "suggestion-ready" : "thinking"} size={56} decorative className="shrink-0" />
+        {found ? (
+          <div data-cat="learning" className="flex min-w-0 flex-1 animate-rise gap-2.5 rounded-2xl border border-line bg-surface p-3">
+            <span className="w-1 shrink-0 rounded-full bg-[var(--c)]" />
+            <div className="min-w-0">
+              <p className="text-[14px] font-semibold">{t("Study session")}</p>
+              <p className="text-[12.5px] text-ink-2">{t("Tomorrow · 18:00–19:00 · free in your calendar")}</p>
+            </div>
+            <span className="ms-auto self-center rounded-lg bg-primary px-2.5 py-1 text-[12px] font-medium text-white">{t("Add")}</span>
           </div>
-          <span className="ms-auto self-center rounded-lg bg-primary px-2.5 py-1 text-[12px] font-medium text-white">{t("Add")}</span>
-        </div>
+        ) : (
+          <p className="pb-3 text-[13px] text-ink-3">{t("Checking your calendar…")}</p>
+        )}
       </div>
-      {/* the assistant, quietly pleased it found the time */}
-      <ThinkingBlob state="success" size={70} className="absolute end-4 bottom-1" />
     </div>
   );
 }

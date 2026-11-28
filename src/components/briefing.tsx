@@ -2,7 +2,8 @@
 import { useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, RefreshCw } from "lucide-react";
-import { ThinkingBlob } from "./blob";
+import { ThinkingBlob } from "@/components/mascot/thinking-blob";
+import { useMascot } from "./mascot/controller";
 import { usePrefs } from "./providers";
 import { Button, Skeleton, cx } from "./ui";
 import { api } from "@/lib/client/api";
@@ -50,6 +51,7 @@ async function fetchBriefing(date: string, locale: string, force: boolean): Prom
 export function DailyBriefing() {
   const { prefs, status, t } = usePrefs();
   const qc = useQueryClient();
+  const mascot = useMascot();
   const today = todayLocal(prefs.timezone);
   const collapsed = useSyncExternalStore(subscribe, () => read<boolean>(COLLAPSED) === true, () => false);
   const q = useQuery({
@@ -76,7 +78,6 @@ export function DailyBriefing() {
   return (
     <section aria-label={t("Daily briefing")} className="mt-5 rounded-2xl border border-primary/15 bg-primary-soft/40 px-3.5 py-2.5">
       <div className="flex items-center gap-2.5">
-        <ThinkingBlob state={loading ? "thinking" : q.isError ? "idle" : "responding"} size={30} className="-my-1" />
         <div className="min-w-0 flex-1">
           {loading ? (
             <Skeleton className="h-4 w-3/4" />
@@ -91,6 +92,8 @@ export function DailyBriefing() {
             <p className={cx("text-[14px] leading-snug font-semibold", collapsed && "truncate")}>{headline}</p>
           )}
         </div>
+        {/* the assistant: thinking while the briefing is written, otherwise its current state */}
+        <ThinkingBlob state={loading || q.isFetching ? "thinking" : q.isError ? "error" : mascot.stateFor()} size={58} className="-my-2 order-last" decorative />
         {!loading && !q.isError ? (
           <>
             {!collapsed ? (

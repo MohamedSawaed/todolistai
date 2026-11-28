@@ -24,6 +24,8 @@ interface PrefsCtx {
   t: TFunction;
 }
 const PrefsContext = createContext<PrefsCtx | null>(null);
+import { ThinkingBlob } from "./mascot/thinking-blob";
+
 export const usePrefs = () => {
   const ctx = useContext(PrefsContext);
   if (!ctx) throw new Error("usePrefs outside provider");
@@ -36,6 +38,8 @@ interface Toast {
   message: string;
   tone?: "default" | "error";
   action?: { label: string; onClick: () => void };
+  /** Show the assistant's small success reaction — only after the server confirmed the action. */
+  mascot?: boolean;
 }
 const ToastContext = createContext<(t: Omit<Toast, "id">) => void>(() => undefined);
 export const useToast = () => useContext(ToastContext);
@@ -164,6 +168,7 @@ export function Providers({ children, initialPrefs, status, signedIn }: { childr
                     t.tone === "error" ? "bg-danger text-white" : "bg-[#20202a] text-white dark:bg-surface-3",
                   )}
                 >
+                  {t.mascot ? <ThinkingBlob state="success" size={30} decorative className="-my-1 -ms-1" /> : null}
                   <span className="min-w-0">{t.message}</span>
                   {t.action ? (
                     <button
