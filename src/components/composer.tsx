@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DateTime } from "luxon";
-import { AlertTriangle, CalendarClock, CheckSquare, MapPin, Plus, StickyNote, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckSquare, MapPin, Plus, StickyNote, Trash2, Phone, Link2 } from "lucide-react";
 import { useAppUI, usePrefs, useToast, type ComposerKind, type ComposerOptions } from "./providers";
 import { Button, Field, Input, Segmented, Sheet, Textarea, cx } from "./ui";
 import { CategoryPicker, PriorityPicker } from "./pickers";
@@ -11,7 +11,8 @@ import { formatReminder, remindersFor } from "@/lib/reminders";
 import { translate, type Locale } from "@/lib/i18n";
 import { api, ApiError } from "@/lib/client/api";
 import { useInvalidateAll, type ConflictResponse } from "@/lib/client/hooks";
-import { fmtSlot, fmtTimeRange } from "@/lib/client/format";
+import { fmtDuration, fmtSlot, fmtTimeRange } from "@/lib/client/format";
+import { preferredDuration } from "@/lib/life/durations";
 import type { CalendarEvent, Category, Priority } from "@/lib/types";
 
 /** Choices for a single default reminder, in the user's language. */
@@ -90,6 +91,8 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
   const [flexibility, setFlexibility] = useState<"fixed" | "flexible">(existing?.flexibility ?? "fixed");
   const [location, setLocation] = useState(existing?.location ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
+  const [phone, setPhone] = useState(existing?.phone ?? "");
+  const [link, setLink] = useState(existing?.url ?? "");
   // null = automatic: keyword rules instantly, then the AI's understanding of the title
   const [manualReminders, setManualReminders] = useState<number[] | null>(existing ? existing.reminders : null);
   const auto = remindersFor(title, category, prefs);
@@ -105,6 +108,13 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
     staleTime: Infinity,
     retry: 0,
   });
+  // a duration the user approved for this kind of activity (learned from recorded time)
+  const learned = !existing && debouncedTitle ? preferredDuration(debouncedTitle, prefs) : null;
+  const [learnedFor, setLearnedFor] = useState<string | null>(null);
+  if (learned && learnedFor !== debouncedTitle) {
+    setLearnedFor(debouncedTitle);
+    setEnd(DateTime.fromISO(`${date}T${start}`, { zone }).plus({ minutes: learned }).toFormat("HH:mm"));
+  }
   // the AI answer only counts while it matches what's typed now
   const ai = aiSuggestion.data && debouncedTitle === title.trim() ? aiSuggestion.data : null;
   const reminders = manualReminders ?? ai?.reminders ?? auto.reminders;
@@ -158,6 +168,8 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
       category,
       flexibility,
       location: location.trim() || null,
+      phone: phone.trim() || null,
+      url: link.trim() || null,
       reminders,
       ...(existing ? { expectedVersion: existing.version } : { taskId: opts?.taskId ?? null }),
       allowOverlap: override?.allowOverlap ?? false,
@@ -295,6 +307,21 @@ export function EventForm({ opts, onDone, existing }: { opts?: ComposerOptions; 
           <Input id="ev-loc" className="ps-9" value={location} onChange={(e) => setLocation(e.target.value)} maxLength={300} />
         </div>
       </Field>
+      {learned && learnedFor === title.trim() ? <p className="-mt-2 text-[12px] text-ink-3">{t("Using your usual {duration} for this.", { duration: fmtDuration(learned, prefs.locale) })}</p> : null}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t("Phone (optional)")} htmlFor="ev-phone" error={errors.phone}>
+          <div className="relative">
+            <Phone className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
+            <Input id="ev-phone" type="tel" dir="ltr" inputMode="tel" className="ps-9" placeholder="+972 50 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={30} />
+          </div>
+        </Field>
+        <Field label={t("Link (optional)")} htmlFor="ev-link" error={errors.url}>
+          <div className="relative">
+            <Link2 className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
+            <Input id="ev-link" type="url" dir="ltr" inputMode="url" className="ps-9" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} maxLength={600} />
+          </div>
+        </Field>
+      </div>
       <Field label={t("Description (optional)")} htmlFor="ev-desc">
         <Textarea id="ev-desc" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} rows={2} />
       </Field>

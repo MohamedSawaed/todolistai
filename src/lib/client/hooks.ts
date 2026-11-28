@@ -45,7 +45,7 @@ export function useNotes(from?: string, to?: string) {
 /** Invalidate everything schedule-related after any write (manual or AI-confirmed). */
 export function useInvalidateAll() {
   const qc = useQueryClient();
-  return () => Promise.all([qc.invalidateQueries({ queryKey: ["events"] }), qc.invalidateQueries({ queryKey: ["tasks"] }), qc.invalidateQueries({ queryKey: ["notes"] })]);
+  return () => Promise.all([qc.invalidateQueries({ queryKey: ["events"] }), qc.invalidateQueries({ queryKey: ["tasks"] }), qc.invalidateQueries({ queryKey: ["notes"] }), qc.invalidateQueries({ queryKey: ["life"] })]);
 }
 
 export interface ConflictResponse {

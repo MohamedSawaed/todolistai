@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CATEGORIES, PRIORITIES, type Preferences } from "./types";
+import { CATEGORIES, LIFE_MODES, PRIORITIES, type Preferences } from "./types";
 import { isValidZone } from "./scheduling/time";
 import { DEFAULT_REMINDER_RULES, REMINDER_RULES_VERSION, upgradeReminderRules } from "./reminders";
 
@@ -17,6 +17,21 @@ export const zReminders = z
   .transform((a) => [...new Set(a)].sort((x, y) => y - x));
 
 const trimmed = (max: number) => z.string().trim().min(1, "Required").max(max);
+
+/** A phone number someone could dial: digits with common separators, optional leading +. */
+export const zPhone = z.string().trim().regex(/^\+?[0-9 ()./-]{3,30}$/, "Enter a valid phone number").refine((v) => v.replace(/\D/g, "").length >= 3, "Enter a valid phone number");
+/** Only secure web links are stored and opened. */
+export const zLink = z
+  .string()
+  .trim()
+  .max(600)
+  .refine((v) => {
+    try {
+      return new URL(v).protocol === "https:";
+    } catch {
+      return false;
+    }
+  }, "Use a full https:// link");
 
 export const eventSourceSchema = z.object({
   type: z.enum(["text", "screenshot", "photo", "pdf"]),
@@ -39,6 +54,9 @@ export const eventInputSchema = z
     reminders: zReminders.default([]),
     taskId: z.string().uuid().nullable().default(null),
     source: eventSourceSchema.nullable().default(null),
+    phone: zPhone.nullable().default(null),
+    url: zLink.nullable().default(null),
+    prepFor: z.string().uuid().nullable().default(null),
   })
   .refine((v) => Date.parse(v.endAt) > Date.parse(v.startAt), { message: "End must be after start", path: ["endAt"] })
   .refine((v) => Date.parse(v.endAt) - Date.parse(v.startAt) <= 7 * 24 * 3600_000, {
@@ -62,6 +80,10 @@ export const eventPatchSchema = z.object({
   followUpDismissed: z.boolean().optional(),
   /** Only removal is allowed: forget where an imported event came from. */
   source: z.null().optional(),
+  phone: zPhone.nullable().optional(),
+  url: zLink.nullable().optional(),
+  /** "Not needed": stop suggesting preparation for this event. */
+  prepDismissed: z.boolean().optional(),
   expectedVersion: z.number().int().optional(),
   allowOverlap: z.boolean().optional(),
 });
@@ -134,6 +156,9 @@ export const preferencesSchema = z.object({
     briefingTime: zTime,
     eveningReview: z.boolean(),
     reviewTime: zTime,
+    upcoming: z.boolean(),
+    deadlines: z.boolean(),
+    quietHours: z.object({ enabled: z.boolean(), start: zTime, end: zTime }),
   }),
   reminderRulesVersion: z.number().int().min(0),
   reminderRules: z
@@ -148,6 +173,13 @@ export const preferencesSchema = z.object({
     )
     .max(20),
   theme: z.enum(["system", "light", "dark"]),
+  intelligence: z.object({ preparation: z.boolean(), realityCheck: z.boolean(), durationLearning: z.boolean() }),
+  durations: z.object({
+    preferred: z.record(z.string().max(120), z.number().int().min(5).max(720)),
+    declined: z.record(z.string().max(120), z.string().max(40)),
+  }),
+  lifeMode: z.object({ type: z.enum(LIFE_MODES), until: zDate.nullable(), focus: z.string().trim().max(120).nullable() }).nullable(),
+  keptChecks: z.array(z.string().max(200)).max(100),
   mascot: z.object({ show: z.boolean(), motion: z.enum(["subtle", "normal", "off"]), celebrate: z.boolean() }),
   ai: z.object({
     preferredFocus: z.enum(["morning", "afternoon", "evening", "any"]),
@@ -169,11 +201,15 @@ export function defaultPreferences(timezone = "UTC"): Preferences {
     defaultDurations: { event: 60, task: 30, study: 60, workout: 60 },
     defaultView: "week",
     bufferMinutes: 0,
-    notifications: { inApp: true, browser: false, defaultReminder: 15, morningBriefing: true, briefingTime: "08:00", eveningReview: true, reviewTime: "20:00" },
+    notifications: { inApp: true, browser: false, defaultReminder: 15, morningBriefing: true, briefingTime: "08:00", eveningReview: true, reviewTime: "20:00", upcoming: true, deadlines: true, quietHours: { enabled: false, start: "22:00", end: "07:00" } },
     reminderRules: DEFAULT_REMINDER_RULES,
     reminderRulesVersion: REMINDER_RULES_VERSION,
     theme: "system",
     mascot: { show: true, motion: "subtle", celebrate: true },
+    intelligence: { preparation: true, realityCheck: true, durationLearning: true },
+    durations: { preferred: {}, declined: {} },
+    lifeMode: null,
+    keptChecks: [],
     ai: { preferredFocus: "any", autoSuggestSessions: true },
     onboarded: false,
   };
@@ -190,7 +226,9 @@ export function normalizePreferences(raw: unknown, fallbackZone = "UTC"): Prefer
     ...r,
     workHours: { ...base.workHours, ...r.workHours },
     defaultDurations: { ...base.defaultDurations, ...r.defaultDurations },
-    notifications: { ...base.notifications, ...r.notifications },
+    notifications: { ...base.notifications, ...r.notifications, quietHours: { ...base.notifications.quietHours, ...r.notifications?.quietHours } },
+    intelligence: { ...base.intelligence, ...r.intelligence },
+    durations: { ...base.durations, ...r.durations },
     ai: { ...base.ai, ...r.ai },
     mascot: { ...base.mascot, ...r.mascot },
   };

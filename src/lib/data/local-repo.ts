@@ -7,7 +7,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import type { CalendarEvent, EventMove, Note, Preferences, Proposal, ProposalResult, ProposalStatus, Task } from "../types";
+import type { ActivitySession, CalendarEvent, EventMove, Note, Preferences, Proposal, ProposalResult, ProposalStatus, Task } from "../types";
 import type { EventInput, NoteInput, TaskInput } from "../schemas";
 import { defaultPreferences, normalizePreferences } from "../schemas";
 import { findConflicts, validateInterval } from "../scheduling/engine";
@@ -18,6 +18,8 @@ import {
   type CheckedWrite,
   type EventUpdate,
   type Repository,
+  type SessionInput,
+  type SessionPatch,
   type StoredMessage,
   type TaskUpdate,
 } from "./repository";
@@ -30,9 +32,10 @@ interface DB {
   conversations: { id: string; userId: string; createdAt: string }[];
   messages: (StoredMessage & { userId: string })[];
   proposals: Proposal[];
+  sessions: ActivitySession[];
 }
 
-const emptyDb = (): DB => ({ events: [], tasks: [], notes: [], preferences: {}, conversations: [], messages: [], proposals: [] });
+const emptyDb = (): DB => ({ events: [], tasks: [], notes: [], preferences: {}, conversations: [], messages: [], proposals: [], sessions: [] });
 
 export class LocalStore {
   private db: DB | null = null;
@@ -50,6 +53,10 @@ export class LocalStore {
         if (!Array.isArray(e.reminders)) e.reminders = e.reminderMinutes == null ? [] : [e.reminderMinutes];
         if (e.followUpDismissedAt === undefined) e.followUpDismissedAt = null;
         if (e.source === undefined) e.source = null;
+        e.phone ??= null;
+        e.url ??= null;
+        e.prepFor ??= null;
+        e.prepDismissedAt ??= null;
         delete e.reminderMinutes;
       }
     } catch (e) {
@@ -150,6 +157,7 @@ export class LocalRepository implements Repository {
         endAt: new Date(input.endAt).toISOString(),
         completedAt: null,
         followUpDismissedAt: null,
+        prepDismissedAt: null,
         version: 1,
         createdAt: ts,
         updatedAt: ts,
@@ -325,6 +333,64 @@ export class LocalRepository implements Repository {
   }
 
   // ---------- preferences ----------
+  // ---------- recorded activity time ----------
+  listSessions(opts: { activityKey?: string; limit?: number } = {}) {
+    return this.store.read((db) =>
+      this.own(db.sessions)
+        .filter((s) => !opts.activityKey || s.activityKey === opts.activityKey)
+        .sort((a, b) => ms(b.createdAt) - ms(a.createdAt))
+        .slice(0, opts.limit ?? 200)
+        .map((s) => structuredClone(s)),
+    );
+  }
+
+  getRunningSession() {
+    return this.store.read((db) => structuredClone(this.own(db.sessions).find((s) => s.source === "timer" && !s.endedAt) ?? null));
+  }
+
+  createSession(input: SessionInput) {
+    return this.store.write((db) => {
+      if (input.source === "timer" && this.own(db.sessions).some((s) => s.source === "timer" && !s.endedAt)) throw new Error("A timer is already running.");
+      if (input.eventId && !this.own(db.events).some((e) => e.id === input.eventId)) throw new NotFoundError("Event");
+      const s: ActivitySession = {
+        id: randomUUID(),
+        userId: this.userId,
+        eventId: input.eventId,
+        activityKey: input.activityKey,
+        title: input.title,
+        category: input.category,
+        scheduledMinutes: input.scheduledMinutes,
+        startedAt: input.startedAt ?? null,
+        pausedAt: null,
+        pausedSeconds: 0,
+        endedAt: input.endedAt ?? null,
+        actualMinutes: input.actualMinutes ?? null,
+        source: input.source,
+        confirmed: input.confirmed ?? false,
+        createdAt: now(),
+      };
+      db.sessions.push(s);
+      return structuredClone(s);
+    });
+  }
+
+  updateSession(id: string, patch: SessionPatch) {
+    return this.store.write((db) => {
+      const s = this.own(db.sessions).find((x) => x.id === id);
+      if (!s) throw new NotFoundError("Session");
+      Object.assign(s, patch);
+      return structuredClone(s);
+    });
+  }
+
+  deleteSession(id: string) {
+    return this.store.write((db) => {
+      const i = db.sessions.findIndex((x) => x.id === id && x.userId === this.userId);
+      if (i < 0) throw new NotFoundError("Session");
+      db.sessions.splice(i, 1);
+    });
+  }
+
   getPreferences() {
     return this.store.read((db) => (db.preferences[this.userId] ? normalizePreferences(db.preferences[this.userId], this.fallbackZone) : defaultPreferences(this.fallbackZone)));
   }

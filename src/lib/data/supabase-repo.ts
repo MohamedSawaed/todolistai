@@ -4,7 +4,7 @@
  * also filter by user_id explicitly as defense in depth.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CalendarEvent, ConflictInfo, EventMove, Note, Preferences, Proposal, ProposalResult, ProposalStatus, Task } from "../types";
+import type { ActivitySession, CalendarEvent, ConflictInfo, EventMove, Note, Preferences, Proposal, ProposalResult, ProposalStatus, Task } from "../types";
 import type { EventInput, NoteInput, TaskInput } from "../schemas";
 import { normalizePreferences } from "../schemas";
 import { validateInterval } from "../scheduling/engine";
@@ -15,6 +15,8 @@ import {
   type CheckedWrite,
   type EventUpdate,
   type Repository,
+  type SessionInput,
+  type SessionPatch,
   type StoredMessage,
   type TaskUpdate,
 } from "./repository";
@@ -42,9 +44,34 @@ function toEvent(r: Row): CalendarEvent {
     followUpDismissedAt: iso(r.followup_dismissed_at ?? null),
     // added by migration 0005; older databases simply have no source
     source: (r.source as CalendarEvent["source"] | undefined) ?? null,
+    // added by migration 0006
+    phone: r.phone ?? null,
+    url: r.url ?? null,
+    prepFor: r.prep_for ?? null,
+    prepDismissedAt: iso(r.prep_dismissed_at ?? null),
     version: r.version,
     createdAt: iso(r.created_at)!,
     updatedAt: iso(r.updated_at)!,
+  };
+}
+
+function toSession(r: Row): ActivitySession {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    eventId: r.event_id,
+    activityKey: r.activity_key,
+    title: r.title,
+    category: r.category,
+    scheduledMinutes: r.scheduled_minutes,
+    startedAt: iso(r.started_at),
+    pausedAt: iso(r.paused_at),
+    pausedSeconds: r.paused_seconds ?? 0,
+    endedAt: iso(r.ended_at),
+    actualMinutes: r.actual_minutes,
+    source: r.source,
+    confirmed: r.confirmed,
+    createdAt: iso(r.created_at)!,
   };
 }
 
@@ -224,6 +251,9 @@ export class SupabaseRepository implements Repository {
           completed_at: s.completedAt,
           followup_dismissed_at: s.followUpDismissedAt,
           ...(s.source ? { source: s.source } : {}),
+          ...(s.phone ? { phone: s.phone } : {}),
+          ...(s.url ? { url: s.url } : {}),
+          ...(s.prepFor ? { prep_for: s.prepFor } : {}),
           version: s.version + 1,
         })
         .select("*")
@@ -336,6 +366,59 @@ export class SupabaseRepository implements Repository {
   }
 
   // ---------- preferences ----------
+  // ---------- recorded activity time ----------
+  async listSessions(opts: { activityKey?: string; limit?: number } = {}) {
+    let q = this.sb.from("activity_sessions").select("*").eq("user_id", this.userId);
+    if (opts.activityKey) q = q.eq("activity_key", opts.activityKey);
+    const rows = check(await q.order("created_at", { ascending: false }).limit(opts.limit ?? 200));
+    return (rows ?? []).map(toSession);
+  }
+
+  async getRunningSession() {
+    const row = check(await this.sb.from("activity_sessions").select("*").eq("user_id", this.userId).eq("source", "timer").is("ended_at", null).maybeSingle());
+    return row ? toSession(row) : null;
+  }
+
+  async createSession(input: SessionInput) {
+    const res = await this.sb
+      .from("activity_sessions")
+      .insert({
+        user_id: this.userId,
+        event_id: input.eventId,
+        activity_key: input.activityKey,
+        title: input.title,
+        category: input.category,
+        scheduled_minutes: input.scheduledMinutes,
+        started_at: input.startedAt ?? null,
+        ended_at: input.endedAt ?? null,
+        actual_minutes: input.actualMinutes ?? null,
+        source: input.source,
+        confirmed: input.confirmed ?? false,
+      })
+      .select("*")
+      .single();
+    // the unique index allows one running timer per user
+    if (res.error?.code === "23505") throw new Error("A timer is already running.");
+    return toSession(one(res));
+  }
+
+  async updateSession(id: string, patch: SessionPatch) {
+    const row: Row = {};
+    if (patch.pausedAt !== undefined) row.paused_at = patch.pausedAt;
+    if (patch.pausedSeconds !== undefined) row.paused_seconds = patch.pausedSeconds;
+    if (patch.endedAt !== undefined) row.ended_at = patch.endedAt;
+    if (patch.actualMinutes !== undefined) row.actual_minutes = patch.actualMinutes;
+    if (patch.confirmed !== undefined) row.confirmed = patch.confirmed;
+    const rows = check(await this.sb.from("activity_sessions").update(row).eq("user_id", this.userId).eq("id", id).select("*"));
+    if (!rows?.length) throw new NotFoundError("Session");
+    return toSession(rows[0]);
+  }
+
+  async deleteSession(id: string) {
+    const rows = check(await this.sb.from("activity_sessions").delete().eq("user_id", this.userId).eq("id", id).select("id"));
+    if (!rows?.length) throw new NotFoundError("Session");
+  }
+
   async getPreferences(): Promise<Preferences> {
     const row = check(await this.sb.from("profiles").select("*").eq("id", this.userId).maybeSingle());
     if (!row) return normalizePreferences(null, this.fallbackZone);

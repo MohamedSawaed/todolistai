@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { CalendarEvent, ConflictInfo, EventMove, Note, Preferences, Proposal, ProposalResult, ProposalStatus, Task } from "../types";
+import type { ActivitySession, CalendarEvent, ConflictInfo, EventMove, Note, Preferences, Proposal, ProposalResult, ProposalStatus, Task } from "../types";
 import type { EventInput, NoteInput, TaskInput } from "../schemas";
 
 export class NotFoundError extends Error {
@@ -49,7 +49,14 @@ export interface EventUpdate {
   completedAt?: string | null;
   followUpDismissedAt?: string | null;
   source?: CalendarEvent["source"];
+  phone?: string | null;
+  url?: string | null;
+  prepDismissedAt?: string | null;
 }
+
+export type SessionInput = Pick<ActivitySession, "eventId" | "activityKey" | "title" | "category" | "scheduledMinutes" | "source"> &
+  Partial<Pick<ActivitySession, "startedAt" | "endedAt" | "actualMinutes" | "confirmed">>;
+export type SessionPatch = Partial<Pick<ActivitySession, "pausedAt" | "pausedSeconds" | "endedAt" | "actualMinutes" | "confirmed">>;
 
 export type TaskUpdate = Partial<Omit<Task, "id" | "userId" | "createdAt" | "updatedAt" | "subtasks">> & {
   subtasks?: { id?: string; title: string; completed: boolean }[];
@@ -88,6 +95,13 @@ export interface Repository {
   createNote(input: NoteInput): Promise<Note>;
   updateNote(id: string, patch: Partial<NoteInput>): Promise<Note>;
   deleteNote(id: string): Promise<void>;
+
+  // recorded activity time
+  listSessions(opts?: { activityKey?: string; limit?: number }): Promise<ActivitySession[]>;
+  getRunningSession(): Promise<ActivitySession | null>;
+  createSession(input: SessionInput): Promise<ActivitySession>;
+  updateSession(id: string, patch: SessionPatch): Promise<ActivitySession>;
+  deleteSession(id: string): Promise<void>;
 
   // preferences
   getPreferences(): Promise<Preferences>;

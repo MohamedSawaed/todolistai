@@ -6,6 +6,7 @@ import { Bell, Check, Database, KeyRound, LogOut } from "lucide-react";
 import { usePrefs, useToast } from "@/components/providers";
 import { Button, Field, Input, Segmented, Select } from "@/components/ui";
 import { ThinkingBlob } from "@/components/mascot/thinking-blob";
+import { NotificationRules, SmartSettings, TimeHistory } from "@/components/life/settings";
 import { AvailabilityFields, ClockField, LanguageField, Section, TimezoneField } from "@/components/preferences-form";
 import { reminderOptions } from "@/components/composer";
 import { ReminderRulesEditor } from "@/components/reminder-rules";
@@ -245,6 +246,7 @@ export default function SettingsPage() {
               />
             </Field>
           ) : null}
+          <NotificationRules draft={draft} setDraft={setDraft} />
           <Field label={t("Default reminder when no rule matches")}>
             <Select
               value={draft.notifications.defaultReminder === null ? "" : String(draft.notifications.defaultReminder)}
@@ -276,6 +278,14 @@ export default function SettingsPage() {
               { value: "dark", label: t("Dark") },
             ]}
           />
+        </Section>
+
+        <Section title={t("Smart assistance")} description={t("Each of these is optional. They only suggest — you decide.")}>
+          <SmartSettings draft={draft} setDraft={setDraft} />
+        </Section>
+
+        <Section title={t("Time history")} description={t("How long your activities actually took — recorded by you, separate from the planned time.")}>
+          <TimeHistory />
         </Section>
 
         <Section title={t("Assistant character")} description={t("The Thinking Blob shows what the assistant is doing. Everything works the same without it.")}>

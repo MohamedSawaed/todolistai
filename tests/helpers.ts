@@ -26,6 +26,9 @@ export function eventInput(start: string, end: string, title = "Event", extra: P
     reminders: [],
     taskId: null,
     source: null,
+    phone: null,
+    url: null,
+    prepFor: null,
     ...extra,
   };
 }

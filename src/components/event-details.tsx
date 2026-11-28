@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { CalendarClock, Clock, Lock, MapPin, Pencil, Sparkles, StickyNote, Trash2, Unlock, Bell, ScanText } from "lucide-react";
+import { CalendarClock, Clock, Lock, MapPin, Pencil, Sparkles, StickyNote, Trash2, Unlock, Bell, ScanText, Phone, Link2, Timer } from "lucide-react";
+import { OneTapActions } from "./life/one-tap";
 import { useAppUI, usePrefs, useToast } from "./providers";
 import { Badge, Button, CheckCircle, Sheet, cx } from "./ui";
 import { EventForm } from "./composer";
@@ -138,6 +139,28 @@ export function EventDetails() {
                 <p dir="auto" className="whitespace-pre-wrap text-ink-2">{event.description}</p>
               </li>
             ) : null}
+            {event.phone ? (
+              <li className="flex items-start gap-3">
+                <Phone className="mt-0.5 size-4 text-ink-3" />
+                <a href={`tel:${event.phone.replace(/[^\d+]/g, "")}`} dir="ltr" className="text-primary-ink hover:underline">
+                  {event.phone}
+                </a>
+              </li>
+            ) : null}
+            {event.url ? (
+              <li className="flex items-start gap-3">
+                <Link2 className="mt-0.5 size-4 text-ink-3" />
+                <a href={event.url} target="_blank" rel="noopener noreferrer" dir="ltr" className="min-w-0 break-all text-primary-ink hover:underline">
+                  {event.url.replace(/^https:\/\//, "")}
+                </a>
+              </li>
+            ) : null}
+            {event.prepFor ? (
+              <li className="flex items-start gap-3 text-[13px] text-ink-2">
+                <CalendarClock className="mt-0.5 size-4 text-ink-3" />
+                {t("Preparation session")}
+              </li>
+            ) : null}
             {event.source ? (
               <li className="flex items-start gap-3">
                 <ScanText className="mt-0.5 size-4 text-ink-3" />
@@ -160,6 +183,8 @@ export function EventDetails() {
               </li>
             ) : null}
           </ul>
+          <OneTapActions event={event} max={4} variant="primary" />
+          <TimeLog event={event} />
           <button
             type="button"
             onClick={() => void toggleDone(!event.completedAt)}
@@ -231,5 +256,59 @@ export function EventDetails() {
         </div>
       )}
     </Sheet>
+  );
+}
+
+/** Record how long this actually took (separate from the scheduled time). */
+function TimeLog({ event }: { event: CalendarEvent }) {
+  const { prefs, t } = usePrefs();
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const [open, setOpen] = useState(false);
+  const [minutes, setMinutes] = useState(() => Math.round((Date.parse(event.endAt) - Date.parse(event.startAt)) / 60000));
+  const [saving, setSaving] = useState(false);
+  if (!open)
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink">
+        <Timer className="size-4" /> {t("Log time spent")}
+      </button>
+    );
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line p-3 text-[13.5px]">
+      <label htmlFor="log-min">{t("Time spent (minutes)")}</label>
+      <input
+        id="log-min"
+        type="number"
+        min={1}
+        max={1440}
+        value={minutes}
+        onChange={(e) => setMinutes(Math.max(1, Math.min(1440, Number(e.target.value) || 1)))}
+        className="tabular h-9 w-24 rounded-xl border border-line bg-surface px-3 outline-none focus:border-primary"
+      />
+      <span className="text-ink-3">({fmtDuration(minutes, prefs.locale)})</span>
+      <Button
+        size="sm"
+        variant="primary"
+        loading={saving}
+        onClick={async () => {
+          setSaving(true);
+          try {
+            await api("/api/sessions", { method: "POST", body: { action: "log", eventId: event.id, minutes } });
+            await invalidate();
+            toast({ message: t("Recorded {duration}", { duration: fmtDuration(minutes, prefs.locale) }) });
+            setOpen(false);
+          } catch (err) {
+            toast({ message: err instanceof ApiError ? t(err.message) : t("Couldn't save"), tone: "error" });
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        {t("Save")}
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+        {t("Cancel")}
+      </Button>
+    </div>
   );
 }

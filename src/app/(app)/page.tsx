@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { ArrowUp, CalendarPlus, CalendarSearch, CheckSquare, ListRestart, MapPin, MoreHorizontal, Plus, Sparkles, StickyNote, Sun } from "lucide-react";
@@ -12,6 +12,11 @@ import { NotificationBell } from "@/components/notifications";
 import { DailyBriefing } from "@/components/briefing";
 import { FollowUps } from "@/components/follow-ups";
 import { EveningReview } from "@/components/evening-review";
+import { NowCard } from "@/components/life/now-card";
+import { LifeSuggestions } from "@/components/life/suggestions";
+import { LifeModeChip } from "@/components/life/life-mode";
+import { OneTapActions } from "@/components/life/one-tap";
+import { api } from "@/lib/client/api";
 import { CATEGORY_META, PRIORITY_META } from "@/components/pickers";
 import { useEvents, useNotes, useNow, useTaskMutations, useTasks } from "@/lib/client/hooks";
 import { useEventActions } from "@/lib/client/event-actions";
@@ -37,6 +42,9 @@ export default function TodayPage() {
   const ws = weekStart(selected, prefs.weekStartsOn, zone);
   const we = DateTime.fromISO(ws).plus({ days: 6 }).toISODate()!;
   const week = useEvents(ws, we, zone);
+  // the Now/Next card always looks at today (and the end of yesterday), whatever week is shown
+  const yesterday = DateTime.fromISO(today).minus({ days: 1 }).toISODate()!;
+  const nowEvents = useEvents(yesterday, today, zone);
   const tasks = useTasks();
   const notes = useNotes(selected, selected);
   const { update } = useTaskMutations();
@@ -91,6 +99,7 @@ export default function TodayPage() {
             {name ? t("{greeting}, {name}", { greeting: t(greetingText(zone)), name }) : t(greetingText(zone))}
           </h1>
           <p className="mt-1.5 min-h-5 text-[14.5px] text-ink-2">{summary ?? <Skeleton className="h-4 w-64" />}</p>
+          <LifeModeChip />
         </div>
         <div className="flex items-center gap-1 lg:hidden">
           <NotificationBell />
@@ -103,8 +112,11 @@ export default function TodayPage() {
       <Suspense fallback={null}>
         <EveningReview />
       </Suspense>
+      {nowEvents.data ? <NowCard events={nowEvents.data} /> : null}
       <DailyBriefing />
+      <LifeSuggestions />
       <FollowUps />
+      <EventDeepLink />
 
       {/* AI quick composer */}
       <section className="mt-6" aria-label={t("Ask the assistant")}>
@@ -300,7 +312,7 @@ function ActivityCard({ event }: { event: CalendarEvent }) {
             {live ? <span className="rounded-full bg-[var(--c-soft)] px-1.5 py-px text-[10.5px] font-semibold text-[var(--c-ink)] uppercase">{t("Now")}</span> : null}
           </div>
           <p className="tabular mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-ink-2">
-            <span>{fmtTimeRange(event.startAt, event.endAt, prefs)}</span>
+            <span dir="ltr">{fmtTimeRange(event.startAt, event.endAt, prefs)}</span>
             <span aria-hidden>·</span>
             <span>{fmtDuration(minutes, prefs.locale)}</span>
             <span aria-hidden>·</span>
@@ -314,6 +326,7 @@ function ActivityCard({ event }: { event: CalendarEvent }) {
             ) : null}
           </p>
           {event.description ? <p className="mt-1 line-clamp-1 text-[12.5px] text-ink-3">{event.description}</p> : null}
+          {!done && !past ? <OneTapActions event={event} max={1} className="mt-2" /> : null}
         </div>
         <span className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-3 opacity-60 transition-opacity group-hover:bg-surface-2 group-hover:opacity-100" aria-hidden>
           <MoreHorizontal className="size-4" />
@@ -321,4 +334,18 @@ function ActivityCard({ event }: { event: CalendarEvent }) {
       </div>
     </li>
   );
+}
+
+/** Notification deep links (/?event=<id>) open that activity. */
+function EventDeepLink() {
+  const ui = useAppUI();
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("event");
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return;
+    window.history.replaceState(null, "", "/");
+    void api<{ event: CalendarEvent }>(`/api/events/${id}`)
+      .then((r) => ui.openEvent(r.event))
+      .catch(() => undefined);
+  }, [ui]);
+  return null;
 }

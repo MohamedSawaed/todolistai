@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import type { Preferences } from "../types";
 import { describeReminders } from "../reminders";
 import { languageName } from "../i18n";
+import { activeLifeMode, LIFE_MODE_META } from "../life/modes";
 
 /**
  * Stable system prompt (no dates or user data, so it stays cacheable).
@@ -39,6 +40,14 @@ Scheduling behavior
 - Reorganizing a day: fetch the day, identify fixed vs flexible items, find free slots, then propose_reorganization moving only flexible events, keeping deadlines. Explain the plan in a sentence or two. If the day simply has too much, say so and suggest what could move to another day.
 - Follow-ups refine earlier requests: "actually make it Friday" changes the pending proposal — create a new proposal with the update and mention it replaces the previous one.
 
+Life-aware planning
+- "What if…" questions about a new recurring commitment (a course, a training plan, a new shift) → simulate_calendar_changes. It never saves anything; describe the impact briefly (sessions, conflicts, what would move, free evenings before → after). The card lets the user apply or discard it.
+- Interviews, exams, presentations and trips often deserve preparation. When relevant (or asked), offer it; if the user agrees, use propose_preparation_session with the event id. Never create extra events on your own.
+- "Is my schedule realistic?", "can I make it?" → check_schedule_feasibility. Present each concern with its certainty: confirmed (a fact), estimate (e.g. travel time between places is NOT checked — say so), or preference. Never state travel times.
+- Durations: if the context lists approved personal durations, use them when the user gives none. For "how long does X take me", call get_activity_durations; if there isn't enough recorded history, say so rather than estimating.
+- Phone numbers and links: only include phone/link in create_event_proposal when the user explicitly gave them; never invent or look them up.
+- An active Life Mode (in the context block) shapes priorities and tone; it never justifies moving or deleting events without the user's confirmation.
+
 Language
 - Always write your replies AND the titles of events, tasks and notes you propose in the app language given in the context block, even if the user writes in another language. Keep people's and place names as written.
 
@@ -51,6 +60,7 @@ Style
 export function contextBlock(prefs: Preferences, now: Date = new Date()): string {
   const local = DateTime.fromJSDate(now).setZone(prefs.timezone);
   const d = prefs.defaultDurations;
+  const mode = activeLifeMode(prefs, now);
   return [
     "<context>",
     `App language: ${languageName(prefs.locale)} — reply and write titles in ${languageName(prefs.locale)}.`,
@@ -63,6 +73,15 @@ export function contextBlock(prefs: Preferences, now: Date = new Date()): string
     `Reminder rules (first match by title word or category): ${prefs.reminderRules
       .map((r) => `${r.label} [${r.keywords.slice(0, 6).join(", ")}${r.categories.length ? `; category ${r.categories.join("/")}` : ""}] → ${describeReminders(r.reminders)}`)
       .join("; ")}. Otherwise: ${prefs.notifications.defaultReminder === null ? "no reminder" : describeReminders([prefs.notifications.defaultReminder])}.`,
+    mode ? `Active Life Mode: ${mode.type}${mode.until ? ` until ${mode.until}` : ""}${mode.focus ? ` (focus: ${mode.focus})` : ""}. ${LIFE_MODE_META[mode.type].guidance}` : "No Life Mode active.",
+    Object.keys(prefs.durations.preferred).length
+      ? `Approved personal durations (activity words → minutes): ${Object.entries(prefs.durations.preferred)
+          .slice(0, 20)
+          .map(([k, v]) => `${k} → ${v}`)
+          .join("; ")}.`
+      : "",
     "</context>",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

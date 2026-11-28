@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, CalendarSearch, KeyRound, ListRestart, RotateCcw, SquarePen, Sun, CalendarPlus } from "lucide-react";
+import { ArrowUp, FlaskConical, Gauge, CalendarSearch, KeyRound, ListRestart, RotateCcw, SquarePen, Sun, CalendarPlus } from "lucide-react";
 import { useAppUI, usePrefs } from "./providers";
 import { Button, cx } from "./ui";
 import { ProposalCard } from "./proposal-card";
@@ -19,6 +19,8 @@ export const SUGGESTIONS = [
   { label: msg("Find free time"), prompt: msg("Find me a free two-hour block this week."), icon: CalendarSearch },
   { label: msg("Add an appointment"), prompt: msg("Add an appointment"), icon: CalendarPlus, prefill: true },
   { label: msg("Reorganize tomorrow"), prompt: msg("I have too much to do tomorrow. Help me reorganize."), icon: ListRestart },
+  { label: msg("What if…"), prompt: msg("What would happen if I started a course every Monday and Wednesday from 18:00 to 20:00 for the next 6 weeks?"), icon: FlaskConical, prefill: true },
+  { label: msg("Is my week realistic?"), prompt: msg("Is my schedule for the next few days realistic?"), icon: Gauge },
 ];
 
 interface Thread {
@@ -335,6 +337,7 @@ function moodOf(m: ChatMessageView): BlobState {
   const conflict = open.some((p) => {
     const x = p.payload;
     if (x.kind === "create_event" || x.kind === "move_event") return x.conflicts.length > 0;
+    if (x.kind === "scenario") return x.unresolved.length > 0;
     if (x.kind === "capture") return x.items.some((i) => i.conflicts.length || i.duplicate || ["conflict", "duplicate"].includes(x.outcomes[i.id]?.status ?? ""));
     return false;
   });

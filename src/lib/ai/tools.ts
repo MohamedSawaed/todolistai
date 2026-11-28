@@ -12,7 +12,11 @@ import { DateTime } from "luxon";
 import type { Repository } from "../data/repository";
 import type { CalendarEvent, Category, EventMove, Preferences, Proposal, Task, TimeWindow } from "../types";
 import { CATEGORIES, PRIORITIES } from "../types";
-import { zDate, zReminders, zTime } from "../schemas";
+import { zDate, zLink, zPhone, zReminders, zTime } from "../schemas";
+import type { ScenarioPayload } from "../types";
+import { createScenarioProposal, LifeError, proposePreparation, ScenarioError } from "../services/life";
+import { realityCheck } from "../life/reality";
+import { activityKey, durationStats, preferredDuration } from "../life/durations";
 import { describeReminders, remindersFor } from "../reminders";
 import { awakeWindow, findConflicts, findFreeSlots, freeMinutesOnDate, NAMED_WINDOWS } from "../scheduling/engine";
 import { dayBounds, localDate, localTime, localToUtc, minutesBetween, todayIn } from "../scheduling/time";
@@ -23,7 +27,27 @@ import { createProposal } from "../services/proposals";
 
 const category = z.enum(CATEGORIES).describe("work | personal | learning | health | important");
 
+// life-aware tools
+const lifeSchemas = {
+  simulate_calendar_changes: z
+    .object({
+      title: z.string().trim().min(1).max(120),
+      category,
+      flexibility: z.enum(["fixed", "flexible"]),
+      weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7).describe("ISO weekdays: 1 = Monday … 7 = Sunday"),
+      start_time: zTime,
+      end_time: zTime,
+      from_date: zDate.describe("First date to consider (local)"),
+      until_date: zDate.describe("Last date to consider (local, inclusive, at most ~3 months later)"),
+    })
+    .strict(),
+  propose_preparation_session: z.object({ event_id: z.string().uuid() }).strict(),
+  check_schedule_feasibility: z.object({ from_date: zDate, to_date: zDate }).strict(),
+  get_activity_durations: z.object({ title: z.string().trim().min(1).max(120).optional().describe("Omit for the user's most recorded activities") }).strict(),
+};
+
 export const toolSchemas = {
+  ...lifeSchemas,
   get_daily_schedule: z.object({ date: zDate.describe("Local date YYYY-MM-DD") }).strict(),
   get_weekly_schedule: z.object({ week_start: zDate.describe("Any date in the target week (YYYY-MM-DD); the full week is returned") }).strict(),
   find_calendar_events: z
@@ -72,6 +96,8 @@ export const toolSchemas = {
         .optional()
         .describe("Minutes before start, e.g. [1440, 120]. Only set when the user asks for specific reminders; otherwise omit and the user's reminder rules apply."),
       task_id: z.string().uuid().optional().describe("Link as a work session for this task"),
+      phone: z.string().max(30).optional().describe("Phone number for a 'Call now' button — only if the user gave it"),
+      link: z.string().max(600).optional().describe("https link (meeting, booking, form) for a one-tap button — only if the user gave it"),
     })
     .strict(),
   create_task_proposal: z
@@ -157,6 +183,14 @@ const descriptions: Record<ToolName, string> = {
   propose_task_update: "Propose changing a task: mark complete/reopen, change due date/time, priority or title.",
   propose_reorganization:
     "Propose moving several FLEXIBLE events at once to rebalance a day. Fixed events cannot be included. The user approves all moves together.",
+  simulate_calendar_changes:
+    "Future Simulator: preview a hypothetical recurring commitment ('what if I took a course Mon & Wed 18:00-20:00 from next week until March?'). The server expands the dates, finds real conflicts, proposes moving only flexible events into free time, and compares free evenings/hours before and after. Nothing is saved: the user sees a scenario card and can apply or discard it.",
+  propose_preparation_session:
+    "Propose a preparation session before an event (interview, exam, presentation, trip). The server finds free time before it and links the session to the event; the user confirms on a card.",
+  check_schedule_feasibility:
+    "Reality Check for up to 7 days: overlaps (confirmed), back-to-back activities in different places (estimate — travel time is not checked), activities during sleep hours (preference), very full days, and close deadlines with no planned time.",
+  get_activity_durations:
+    "How long the user's activities actually take, from recorded and user-confirmed sessions (not scheduled time). Returns null stats when there isn't enough history — then say so instead of guessing.",
 };
 
 export const TOOL_DEFINITIONS: Anthropic.Beta.BetaTool[] = (Object.keys(toolSchemas) as ToolName[]).map((name) => {
@@ -281,6 +315,73 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
 type Handlers = { [K in ToolName]: (input: z.infer<(typeof toolSchemas)[K]>, ctx: ToolContext) => Promise<unknown> };
 
 const handlers: Handlers = {
+  async simulate_calendar_changes(input, ctx) {
+    const proposal = await createScenarioProposal(ctx.repo, ctx.prefs, ctx.conversationId, {
+      title: input.title,
+      category: input.category as Category,
+      flexibility: input.flexibility,
+      weekdays: [...new Set(input.weekdays)].sort(),
+      start: input.start_time,
+      end: input.end_time,
+      from: input.from_date,
+      until: input.until_date,
+    }).catch((e) => {
+      if (e instanceof ScenarioError) throw new ToolInputError(e.message);
+      throw e;
+    });
+    ctx.proposals.push(proposal);
+    const p = proposal.payload as ScenarioPayload;
+    const zone = ctx.prefs.timezone;
+    return {
+      proposal_id: proposal.id,
+      status: "preview_only_nothing_saved",
+      sessions: p.occurrences.length,
+      conflicts: p.occurrences.filter((o) => o.conflicts.length).map((o) => ({ date: o.date, with: o.conflicts.map((c) => conflictView(c, zone)) })),
+      flexible_moves: p.moves.map((m) => ({ title: m.title, from: slotView(m.before, zone), to: slotView(m.after, zone) })),
+      unresolved_conflicts: p.unresolved.map((c) => conflictView(c, zone)),
+      free_evenings_per_week: { before: p.before.freeEveningsPerWeek, after: p.after.freeEveningsPerWeek },
+      free_hours_per_week: { before: p.before.freeHoursPerWeek, after: p.after.freeHoursPerWeek },
+      note: "The user sees a before/after card and can apply it (re-checked against the live calendar) or discard it. Summarize the impact in 1-2 sentences; do not say anything was added.",
+    };
+  },
+
+  async propose_preparation_session({ event_id }, ctx) {
+    const proposal = await proposePreparation(ctx.repo, ctx.prefs, event_id, ctx.conversationId).catch((e) => {
+      if (e instanceof LifeError) throw new ToolInputError(e.message);
+      throw e;
+    });
+    ctx.proposals.push(proposal);
+    const ev = proposal.payload.kind === "create_event" ? proposal.payload.event : null;
+    return { proposal_id: proposal.id, status: "awaiting_user_confirmation", proposed: ev ? slotView({ start: ev.startAt, end: ev.endAt }, ctx.prefs.timezone) : null, note: AWAITING };
+  },
+
+  async check_schedule_feasibility({ from_date, to_date }, ctx) {
+    const zone = ctx.prefs.timezone;
+    const days: string[] = [];
+    for (let d = DateTime.fromISO(from_date); d <= DateTime.fromISO(to_date) && days.length < 7; d = d.plus({ days: 1 })) days.push(d.toISODate()!);
+    if (!days.length) throw new ToolInputError("to_date must be on or after from_date");
+    const range = { from: dayBounds(days[0], zone).start, to: dayBounds(days[days.length - 1], zone).end };
+    const [events, tasks] = await Promise.all([ctx.repo.listEvents(range), ctx.repo.listTasks()]);
+    const concerns = realityCheck(events, tasks, { ...ctx.prefs, intelligence: { ...ctx.prefs.intelligence, realityCheck: true }, keptChecks: [] }, days);
+    return { checked: days, travel_time_checked: false, concerns: concerns.map((c) => ({ kind: c.kind, certainty: c.certainty, date: c.date, ...c.facts })) };
+  },
+
+  async get_activity_durations({ title }, ctx) {
+    const sessions = await ctx.repo.listSessions({ activityKey: title ? activityKey(title) : undefined, limit: 200 });
+    const byKey = new Map<string, typeof sessions>();
+    for (const s of sessions) byKey.set(s.activityKey, [...(byKey.get(s.activityKey) ?? []), s]);
+    return {
+      learning_enabled: ctx.prefs.intelligence.durationLearning,
+      activities: [...byKey.entries()].slice(0, 10).map(([key, list]) => ({
+        activity: list[0].title,
+        recorded_sessions: list.filter((x) => x.confirmed && x.actualMinutes).length,
+        stats: durationStats(list),
+        approved_duration_minutes: ctx.prefs.durations.preferred[key] ?? null,
+      })),
+      note: "Stats are null until there are at least 4 confirmed sessions; never estimate personal durations without them.",
+    };
+  },
+
   async get_daily_schedule({ date }, ctx) {
     const zone = ctx.prefs.timezone;
     const { events, tasks } = await scheduleFor(ctx, date, date);
@@ -382,7 +483,7 @@ const handlers: Handlers = {
       endAt = localToUtc(input.date, input.end_time, zone);
       if (Date.parse(endAt) <= Date.parse(startAt)) endAt = DateTime.fromISO(endAt).plus({ days: 1 }).toUTC().toISO()!; // crosses midnight
     } else {
-      endAt = DateTime.fromISO(startAt).plus({ minutes: input.duration_minutes ?? ctx.prefs.defaultDurations.event }).toUTC().toISO()!;
+      endAt = DateTime.fromISO(startAt).plus({ minutes: input.duration_minutes ?? preferredDuration(input.title, ctx.prefs) ?? ctx.prefs.defaultDurations.event }).toUTC().toISO()!;
     }
     if (Date.parse(startAt) < Date.now() - 5 * 60_000) throw new ToolInputError("That time is in the past. Ask the user to confirm the intended date.");
     if (input.task_id && !(await ctx.repo.getTask(input.task_id))) throw new ToolInputError("task_id not found");
@@ -400,6 +501,8 @@ const handlers: Handlers = {
         location: input.location ?? null,
         reminders: zReminders.parse(input.reminders ?? remindersFor(input.title, input.category as Category, ctx.prefs).reminders),
         taskId: input.task_id ?? null,
+        phone: input.phone ? zPhone.parse(input.phone) : null,
+        url: input.link ? zLink.parse(input.link) : null,
       },
       ...analysis,
     });

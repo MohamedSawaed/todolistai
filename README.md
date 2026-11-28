@@ -77,7 +77,8 @@ app and showing notifications.
 
 **6. Later database updates.** Run each newer file in `supabase/migrations` once, in order:
 `0004_localized_notifications.sql` (notifications in each user's language, evening review) and
-`0005_capture_source.sql` (keeps where an imported event came from).
+`0005_capture_source.sql` (keeps where an imported event came from) and `0006_life_aware.sql`
+(one-tap action details, preparation links, recorded activity time, notification rules).
 
 Every push to `main` on GitHub redeploys automatically. If you change a `NEXT_PUBLIC_*`
 variable, redeploy so the new value is built in. `npm run test:db` checks the SQL migrations
@@ -150,6 +151,30 @@ supabase/migrations      Schema, RLS policies, locked check-then-write functions
   for review, and it is dropped when the import is finished or discarded. Imported events keep a
   `source` (label + quote) that the user can remove from the event's details. Shared content is
   treated as untrusted data: instructions inside it are ignored and can't trigger any action.
+
+### Life-aware assistant (before → during → after)
+- **Now/Next card** (`lib/life/now.ts`): the most relevant activity from real data. Past activities
+  are never assumed done — they become "Did it happen?".
+- **One-tap actions** (`lib/life/actions.ts`): call, join meeting, directions, open link, view task —
+  only from details the user saved (phone, https link, location, linked task). Nothing is guessed.
+- **Preparation** (`lib/life/preparation.ts`): interviews, exams, presentations and trips (EN/AR/HE)
+  get an offer to reserve time before them; the slot comes from the scheduling engine and is saved
+  only after confirmation, linked with `prep_for`.
+- **Personal time** (`lib/life/durations.ts`, `activity_sessions`): a Start / Pause / Finish timer and
+  manual logging. Only user-confirmed time counts; statistics are a median of recent sessions with
+  outliers set aside, from 4 sessions up. History can be viewed, corrected and deleted in Settings.
+- **Reality Check** (`lib/life/reality.ts`): overlaps (confirmed), back-to-back activities in different
+  places (estimate — no routing provider is connected, so travel time is never stated), sleep-time
+  activities (preference), very full days and close deadlines without planned time.
+- **Future Simulator** (`lib/life/simulator.ts`, AI tool `simulate_calendar_changes`): expands a
+  recurring commitment in the user's timezone, finds conflicts, moves only flexible events into free
+  time and compares free evenings/hours. It is a pure function over a snapshot; applying re-runs it on
+  the live calendar and writes nothing if the result changed, with a compensating rollback on failure.
+- **Life Modes** (`lib/life/modes.ts`): Exam, Busy Workweek, Travel, Project — shape the assistant's
+  context, preparation ranking, Reality Check thresholds and notifications; never move events.
+- **Notifications** (0006): per-category switches, quiet hours, at most 6 per 15 minutes, exactly-once
+  delivery, and deep links that open the activity. Preparation and Reality Check appear in the app
+  (not as push) to keep notifications to what's essential.
 
 ### Data model notes
 - Timed events store UTC `timestamptz` plus the IANA `timezone` they were created in. The UI

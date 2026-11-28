@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const ATTRS = new Set(["aria-label", "placeholder", "title", "alt", "label", "description", "hint"]);
 // brand names, keyboard keys and symbols that are the same in every language
-const ALLOW = new Set(["PlanMind", "N", "Esc", "AM", "PM", "UTC", "?", "/", "English"]);
+const ALLOW = new Set(["PlanMind", "N", "Esc", "AM", "PM", "UTC", "?", "/", "English", "https://…"]);
 const SKIP_FILES = new Set(["src/app/layout.tsx"]); // server setup page shown only to the developer
 
 // key names, HTTP bits and other code identifiers that look like words but aren't UI text

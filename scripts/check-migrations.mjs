@@ -130,5 +130,39 @@ const rm = (await as(A, `select update_event_checked($1, '{"source":null}'::json
 ok(rm.ok === true && rm.event.source === null && rm.event.title === "Dentist", "source can be removed without touching the event");
 ok((await as(B, `select * from calendar_events where source is not null`)).length === 0, "user B cannot read user A's import sources");
 
+// Life-aware: one-tap details, preparation links, recorded time, notification rules
+const call = (await as(A, `select create_event_checked($1::jsonb, true, 0) as r`, [ev("Call the carpenter", "2027-02-05T09:00:00Z", "2027-02-05T09:15:00Z", { phone: "+972 50-123-4567", url: "https://meet.google.com/abc-defg-hij" })]))[0].r;
+ok(call.ok === true && call.event.phone === "+972 50-123-4567" && call.event.url.startsWith("https://"), "events store a phone number and an https link");
+let badLink = false;
+try { await as(A, `select create_event_checked($1::jsonb, true, 0) as r`, [ev("Bad", "2027-02-06T09:00:00Z", "2027-02-06T10:00:00Z", { url: "javascript:alert(1)" })]); } catch { badLink = true; }
+ok(badLink, "non-https links are rejected by the database");
+const prep = (await as(A, `select create_event_checked($1::jsonb, true, 0) as r`, [ev("Prepare: Interview", "2027-02-05T07:00:00Z", "2027-02-05T07:30:00Z", { prepFor: call.event.id })]))[0].r;
+ok(prep.ok === true && prep.event.prep_for === call.event.id, "a preparation session links to its event");
+let crossPrep = false;
+try { await as(B, `select create_event_checked($1::jsonb, true, 0) as r`, [ev("Sneaky", "2027-02-05T07:00:00Z", "2027-02-05T07:30:00Z", { prepFor: call.event.id })]); } catch { crossPrep = true; }
+ok(crossPrep, "user B cannot link to user A's event");
+const dis2 = (await as(A, `select update_event_checked($1, $2::jsonb, null, false, 0) as r`, [call.event.id, JSON.stringify({ prepDismissedAt: new Date().toISOString(), phone: null })]))[0].r;
+ok(dis2.ok === true && dis2.event.prep_dismissed_at !== null && dis2.event.phone === null, "preparation can be dismissed and details removed");
+
+await as(A, `insert into activity_sessions (activity_key, title, source, started_at) values ('english study', 'Study English', 'timer', now())`);
+let twoTimers = false;
+try { await as(A, `insert into activity_sessions (activity_key, title, source, started_at) values ('x', 'X', 'timer', now())`); } catch { twoTimers = true; }
+ok(twoTimers, "only one running timer per person");
+await as(A, `insert into activity_sessions (activity_key, title, source, actual_minutes, confirmed) values ('english study', 'Study English', 'manual', 90, true)`);
+ok((await as(B, `select * from activity_sessions`)).length === 0, "user B cannot see user A's recorded time");
+ok((await as(B, `update activity_sessions set actual_minutes = 1 returning id`)).length === 0, "user B cannot change user A's recorded time");
+
+const notify = async (prefs, kind, tz = "UTC") => (await db.query(`select private._notify_ok($1, $2::jsonb, $3, $4) as ok`, [A, JSON.stringify(prefs), tz, kind])).rows[0].ok;
+const nowUtc = new Date();
+const hhmm = (d) => d.toISOString().slice(11, 16);
+const quiet = { notifications: { quietHours: { enabled: true, start: hhmm(new Date(nowUtc.getTime() - 3600_000)), end: hhmm(new Date(nowUtc.getTime() + 3600_000)) } } };
+ok((await notify({}, "event")) === true, "notifications allowed by default");
+ok((await notify({ notifications: { upcoming: false } }, "event")) === false, "upcoming-activity notifications can be switched off");
+ok((await notify({ notifications: { deadlines: false } }, "task")) === false, "deadline notifications can be switched off");
+ok((await notify(quiet, "event")) === false, "quiet hours hold notifications");
+ok((await notify({ lifeMode: { type: "busy", until: null } }, "review")) === false && (await notify({ lifeMode: { type: "busy", until: null } }, "event")) === true, "Busy Workweek keeps only essential notifications");
+await db.exec(`insert into reminder_deliveries (user_id, kind, fire_key) select '${A}', 'event', 'cap-' || g from generate_series(1, 6) g`);
+ok((await notify({}, "event")) === false, "no more than 6 notifications in 15 minutes");
+
 console.log(failures ? `\n${failures} FAILED` : "\nALL CHECKS PASSED");
 process.exit(failures ? 1 : 0);

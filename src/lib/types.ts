@@ -31,6 +31,13 @@ export interface CalendarEvent {
   followUpDismissedAt: string | null;
   /** Where an imported event came from (Universal Capture). The user can remove it. */
   source: EventSource | null;
+  /** One-tap actions: a phone number to call and an https link (meeting, booking, form). */
+  phone: string | null;
+  url: string | null;
+  /** This event is a preparation session for another event. */
+  prepFor: string | null;
+  /** The user dismissed the preparation suggestion for this event. */
+  prepDismissedAt: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -114,16 +121,50 @@ export interface Preferences {
     /** Evening prompt to review today's unfinished activities (asks; never assumes). */
     eveningReview: boolean;
     reviewTime: string; // HH:mm
+    /** Upcoming-activity reminders and task deadlines (phone notifications). */
+    upcoming: boolean;
+    deadlines: boolean;
+    quietHours: { enabled: boolean; start: string; end: string };
   };
   /** Bumped when the default rules change, so saved settings can be upgraded. */
   reminderRulesVersion: number;
   /** Activity-aware reminders: the first rule whose keyword or category matches wins. */
   reminderRules: ReminderRule[];
   theme: "system" | "light" | "dark";
+  /** Optional intelligence, each switchable. */
+  intelligence: { preparation: boolean; realityCheck: boolean; durationLearning: boolean };
+  /** Durations the user approved for recurring kinds of activity (activity key → minutes). */
+  durations: { preferred: Record<string, number>; declined: Record<string, string> };
+  /** A temporary planning focus. Expired modes are ignored. */
+  lifeMode: { type: LifeModeType; until: string | null; focus: string | null } | null;
+  /** Reality Check concerns the user chose to keep (stable keys), newest last. */
+  keptChecks: string[];
   /** The Thinking Blob, PlanMind's assistant character. */
   mascot: { show: boolean; motion: "subtle" | "normal" | "off"; celebrate: boolean };
   ai: { preferredFocus: "morning" | "afternoon" | "evening" | "any"; autoSuggestSessions: boolean };
   onboarded: boolean;
+}
+
+export const LIFE_MODES = ["exam", "busy", "travel", "project"] as const;
+export type LifeModeType = (typeof LIFE_MODES)[number];
+
+/** Recorded time for an activity — what actually happened, apart from what was scheduled. */
+export interface ActivitySession {
+  id: string;
+  userId: string;
+  eventId: string | null;
+  activityKey: string;
+  title: string;
+  category: Category;
+  scheduledMinutes: number | null;
+  startedAt: string | null;
+  pausedAt: string | null;
+  pausedSeconds: number;
+  endedAt: string | null;
+  actualMinutes: number | null;
+  source: "timer" | "manual";
+  confirmed: boolean;
+  createdAt: string;
 }
 
 export interface ReminderRule {
@@ -166,6 +207,9 @@ export interface EventDraft {
   location: string | null;
   reminders: number[];
   taskId: string | null;
+  phone?: string | null;
+  url?: string | null;
+  prepFor?: string | null;
 }
 
 export interface EventMove {
@@ -224,7 +268,50 @@ export type ProposalPayload =
       before: number[];
       after: number[];
     }
-  | CapturePayload;
+  | CapturePayload
+  | ScenarioPayload;
+
+// ---------- Future Simulator ----------
+
+export interface ScenarioCommitment {
+  title: string;
+  category: Category;
+  flexibility: Flexibility;
+  /** ISO weekdays 1..7 (Monday = 1). */
+  weekdays: number[];
+  start: string; // HH:mm local
+  end: string; // HH:mm local (may be earlier than start: crosses midnight)
+  from: string; // YYYY-MM-DD
+  until: string; // YYYY-MM-DD (inclusive)
+}
+
+export interface ScenarioOccurrence extends Interval {
+  date: string;
+  conflicts: ConflictInfo[];
+}
+
+/** What-if: computed on a copy of the schedule. Nothing is saved until the user applies it. */
+export interface ScenarioPayload {
+  kind: "scenario";
+  commitment: ScenarioCommitment;
+  occurrences: ScenarioOccurrence[];
+  /** Flexible events that would be moved to make room (fixed ones never are). */
+  moves: EventMove[];
+  /** Conflicts with fixed events, or flexible ones with no free time to move to. */
+  unresolved: ConflictInfo[];
+  before: ScenarioMetrics;
+  after: ScenarioMetrics;
+  /** Snapshot fingerprint: applying re-runs the simulation and compares. */
+  fingerprint: string;
+}
+
+export interface ScenarioMetrics {
+  /** Evenings per week with at most 30 minutes committed between 17:00 and 22:00, averaged. */
+  freeEveningsPerWeek: number;
+  /** Free waking hours per week within the user's awake window, averaged. */
+  freeHoursPerWeek: number;
+  weeks: number;
+}
 
 // ---------- Universal Capture ----------
 
@@ -329,7 +416,8 @@ export type ProposalResult =
   | { kind: "event_deleted"; snapshot: CalendarEvent }
   | { kind: "task_updated"; taskId: string }
   | { kind: "event_updated"; eventId: string }
-  | { kind: "capture_applied"; added: number; updated: number; skipped: number };
+  | { kind: "capture_applied"; added: number; updated: number; skipped: number }
+  | { kind: "scenario_applied"; eventIds: string[]; movedIds: string[] };
 
 /** Choice the user makes on a proposal card (e.g. pick an alternative slot). */
 export interface ConfirmChoice {
