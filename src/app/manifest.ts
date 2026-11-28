@@ -11,8 +11,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     start_url: "/",
     display: "standalone",
-    background_color: "#15121f", // the splash behind the blob while the app opens
-    theme_color: "#7665d8",
+    background_color: "#120e1f", // the launch screen: matches the icon's edge, so the character floats with no disc
+    theme_color: "#120e1f", // status bar on the launch screen blends in too
     // Android: lets "Share → PlanMind" send text, screenshots, photos and PDFs to the assistant.
     // (Handled by public/sw.js; iOS doesn't support share targets for web apps.)
     share_target: {
@@ -30,6 +30,8 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
       { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      // themed (one-colour) launchers tint this silhouette instead of shrinking the full-colour icon
+      { src: "/icon-monochrome-512.png", sizes: "512x512", type: "image/png", purpose: "monochrome" },
     ],
   };
 }
